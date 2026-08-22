@@ -29,6 +29,8 @@ const docs = [
   { id: 'seedance20', title: 'Seedance 2.0', file: '/docs/seedance-2.0.md' },
   { id: 'minimax', title: 'MiniMax H3', file: '/docs/minimax-h3.md' },
   { id: 'gemini', title: 'Gemini Omni Flash', file: '/docs/gemini-omni-flash.md' },
+  { id: 'veo31', title: 'Veo 3.1', file: '/docs/veo-3.1.md' },
+  { id: 'prompt-libraries', title: '提示词参考库', file: '/docs/prompt-libraries.md' },
 ];
 
 const worldTabs: { id: WorldTab; title: string }[] = [
@@ -112,6 +114,14 @@ function MarkdownView({ source }: { source: string }) {
       index += 1;
       while (index < lines.length && !lines[index].trim().startsWith('```')) { code.push(lines[index]); index += 1; }
       blocks.push(<pre key={`code-${index}`}><code>{code.join('\n')}</code></pre>);
+    } else if (line.includes('|') && index + 1 < lines.length && /^\|?\s*:?-{3,}/.test(lines[index + 1].trim())) {
+      const cells = (value: string) => value.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+      const header = cells(lines[index]);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && lines[index].trim().includes('|')) { rows.push(cells(lines[index])); index += 1; }
+      index -= 1;
+      blocks.push(<div className="md-table-wrap" key={`table-${index}`}><table><thead><tr>{header.map((cell, cellIndex) => <th key={cellIndex}><InlineMarkdown text={cell} /></th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}><InlineMarkdown text={cell} /></td>)}</tr>)}</tbody></table></div>);
     } else if (line.startsWith('# ')) blocks.push(<h1 key={index}>{line.slice(2)}</h1>);
     else if (line.startsWith('## ')) blocks.push(<h2 key={index}>{line.slice(3)}</h2>);
     else if (line.startsWith('### ')) blocks.push(<h3 key={index}>{line.slice(4)}</h3>);

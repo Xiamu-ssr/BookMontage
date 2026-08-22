@@ -19,4 +19,4 @@ SQLite 是唯一事实源。不要手改 `public/generated/library.json`，它�
 
 网络调研素材放进“临时素材”，不要伪装成正式角色资产。使用 `stash <url> --title <名称> --source <来源页面>` 下载到 `.bookmontage/tmp`；图片、GIF、视频和文档都可保存。确认采用后再生成正式 `asset`，并用 `derived_from` 指回临时素材。
 
-写模型提示词时，只读取当前模型对应的说明：[Seedance 2.5](references/seedance-2.5.md)、[Seedance 2.0](references/seedance-2.0.md)、[MiniMax H3](references/minimax-h3.md) 或 [Gemini Omni Flash](references/gemini-omni-flash.md)。没有第一方提示词手册的模型只能记录为模型卡，禁止把社区经验标成官方规则。
+写模型提示词时，只读取当前模型对应的说明：[Seedance 2.5](references/seedance-2.5.md)、[Seedance 2.0](references/seedance-2.0.md)、[MiniMax H3](references/minimax-h3.md)、[Gemini Omni Flash](references/gemini-omni-flash.md) 或 [Veo 3.1](references/veo-3.1.md)。同一叙事目标可以共用，但必须按目标模型的官方结构重新编译提示词，禁止向不同模型原样发送同一版。没有第一方提示词手册的模型只能记录为模型卡；[社区提示词库](references/prompt-libraries.md)只作灵感，禁止把社区经验标成官方规则。
