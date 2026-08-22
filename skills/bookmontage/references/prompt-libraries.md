@@ -9,10 +9,15 @@
 ```bash
 npm run bookmontage -- prompt-search "仙侠 打斗" --model 2.5 --limit 5
 npm run bookmontage -- prompt-search "仙侠 打斗" --model 2.0 --limit 2 --full
-npm run bookmontage -- prompt-search "仙侠 打斗" --model all --limit 5
+npm run bookmontage -- prompt-search "天宫" --model 2.5 --tag scifi-fantasy --kind r2v --min-images 5 --full
+npm run bookmontage -- prompt-search --trending --model 2.5 --limit 6
+npm run bookmontage -- prompt-search --author Soran --lang zh --sort newest --limit 10
+npm run bookmontage -- prompt-facets --model 2.5 --lang zh
 ```
 
-默认 `--model all`，返回短摘要；`--full` 返回完整提示词，`--refresh` 强制更新本地缓存，`--lang en` 切换英文目录。结果同时返回 `model`、成片链接、来源与许可证。站点将明确标注为 2.5 的新案例归入 2.5，其余归入可用于 2.0 的经典库，与站点的版本筛选逻辑一致。
+不写关键词时可以直接浏览筛选结果。默认 `--model all --lang all` 并返回短摘要；`--full` 返回完整提示词，`--refresh` 强制更新本地缓存。可重复或用逗号组合 `--tag`、`--author`、`--kind`；`--min-images` 筛选至少引用多少张图；`--trending` 只看当前趋势；`--sort` 支持相关度、最新和最早。`prompt-facets` 先列出当前模型/语言下可用的标签、提示词类型与作者计数。
+
+每条结果同时返回版本、语言、标签、作者、日期、提示词类型、`@Image` 引用槽位和数量、成片、缩略图、案例页、原作者来源与许可证。站点明确标注为 2.5 的新案例归入 2.5，其余归入可用于 2.0 的经典库，与站点本身的版本筛选逻辑一致。
 
 `npm run bookmontage -- prompt-search` 里的 `--` 是 npm 的“后续内容原样传给脚本”分隔符，`prompt-search` 是 BookMontage 子命令，因此不能写成 `--prompt-search`。
 
@@ -28,6 +33,6 @@ npm run bookmontage -- prompt-search "仙侠 打斗" --model all --limit 5
 
 ## 数据来源
 
-网站本身没有公开 Skill 或 CLI，但它链接了一份持续更新的开源目录：[YouMind OpenLab / Awesome Seedance 2 Prompts](https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts)。BookMontage CLI 从这份 CC BY 4.0 目录读取，并只在 `.bookmontage/cache` 保存短期缓存。
+网站本身没有公开 Skill 或 CLI。BookMontage CLI 读取网站公开的结构化案例目录；其中包含站点当前的全文、标签、作者、日期、版本、引用槽位、成片与趋势列表，并只在 `.bookmontage/cache` 保存六小时短期缓存。数据仍注明来自 [YouMind OpenLab / Awesome Seedance 2 Prompts](https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts)，许可证为 CC BY 4.0。
 
 引用或改编案例时保留来源；模型大版本更新后，优先看同版本、最近发布且附实片的例子。

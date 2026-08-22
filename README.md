@@ -44,6 +44,9 @@ npm run bookmontage -- list [type]
 npm run bookmontage -- show <id|slug|path>
 npm run bookmontage -- prompt <id|slug|path>
 npm run bookmontage -- prompt-search "仙侠 打斗" --model 2.5 --limit 3 --full
+npm run bookmontage -- prompt-search "天宫" --tag scifi-fantasy --kind r2v --min-images 5
+npm run bookmontage -- prompt-search --trending --model 2.5
+npm run bookmontage -- prompt-facets --model 2.5 --lang zh
 npm run bookmontage -- revise <id> <patch.json>
 npm run bookmontage -- export
 npm run bookmontage -- verify

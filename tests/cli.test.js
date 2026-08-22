@@ -77,39 +77,33 @@ test('stash keeps downloaded research in the disposable tmp library', () => {
 
 test('help exposes the Seedance example search command', () => {
   const home = mkdtempSync(join(tmpdir(), 'bookmontage-help-'));
-  assert.match(run(home, 'help'), /prompt-search <keywords>/);
+  assert.match(run(home, 'help'), /prompt-search \[keywords\]/);
   assert.match(run(home, 'help'), /--model all\|2\.5\|2\.0/);
+  assert.match(run(home, 'help'), /--tag action/);
+  assert.match(run(home, 'help'), /prompt-facets/);
 });
 
-test('prompt search keeps native 2.5 examples separate from the classic 2.0 catalog', () => {
+test('prompt search filters the live catalog by model, tags, author, kind, references and trend', () => {
   const home = mkdtempSync(join(tmpdir(), 'bookmontage-prompts-'));
   mkdirSync(join(home, 'cache'), { recursive:true });
-  writeFileSync(join(home, 'cache', 'seedance-prompts-zh.md'), `### No. 1: Seedance 2.5 仙侠大战
-
-#### 📖 描述
-
-云层中的高速打斗
-
-#### 📝 提示词
-
-\`\`\`
-Seedance 2.5，仙侠人物在云层中高速打斗。
-\`\`\`
-
-### No. 2: 仙侠大战
-
-#### 📖 描述
-
-Seedance 2.0 经典仙侠打斗
-
-#### 📝 提示词
-
-\`\`\`
-仙侠人物在山巅之间打斗。
-\`\`\`
-`);
+  writeFileSync(join(home, 'cache', 'seedance-prompts.json'), JSON.stringify({
+    source:'fixture', license:'CC BY 4.0', scrapedAt:'2026-08-20T00:00:00Z', trendingIds:['1'], prompts:[
+      { id:'1', slug:'xianxia-five-images', title:'Seedance 2.5 仙侠天宫', description:'五镜头仙侠短片', prompt:'仙侠人物在云层中高速打斗。', language:'zh', version:'2.5', promptKind:'r2v', authorName:'Soran', createdAt:'2026-08-16', tags:['scifi-fantasy','r2v'], references:['@Image 1','@Image 2','@Image 3','@Image 4','@Image 5'], videoUrl:'https://example.com/1.mp4' },
+      { id:'2', slug:'classic-xianxia', title:'仙侠大战', description:'Seedance 2.0 经典仙侠打斗', prompt:'仙侠人物在山巅之间打斗。', language:'zh', authorName:'Classic', createdAt:'2026-01-01', tags:['action'], references:[], videoUrl:'https://example.com/2.mp4' },
+      { id:'3', slug:'two-image-fight', title:'双图打斗', description:'动作参考', prompt:'两张图的动作场面。', language:'zh', version:'2.5', promptKind:'r2v', authorName:'Fighter', createdAt:'2026-08-17', tags:['action','r2v'], references:['@Image 1','@Image 2'], videoUrl:'https://example.com/3.mp4' },
+    ],
+  }));
   const native = JSON.parse(run(home, 'prompt-search', '仙侠', '--model', '2.5'));
   const classic = JSON.parse(run(home, 'prompt-search', '仙侠', '--model', '2.0'));
   assert.deepEqual(native.map(item => item.model), ['2.5']);
   assert.deepEqual(classic.map(item => item.model), ['2.0']);
+  const exact = JSON.parse(run(home, 'prompt-search', '--model', '2.5', '--tag', 'scifi-fantasy', '--author', 'soran', '--kind', 'r2v', '--min-images', '5', '--full'));
+  assert.equal(exact.length, 1);
+  assert.equal(exact[0].reference_image_count, 5);
+  assert.equal(exact[0].prompt, '仙侠人物在云层中高速打斗。');
+  const trending = JSON.parse(run(home, 'prompt-search', '--trending'));
+  assert.deepEqual(trending.map(item => item.id), ['1']);
+  const facets = JSON.parse(run(home, 'prompt-facets', '--model', '2.5'));
+  assert.deepEqual(facets.models, [{ value:'2.5', total:2 }]);
+  assert.ok(facets.tags.some(item => item.value === 'r2v' && item.total === 2));
 });
