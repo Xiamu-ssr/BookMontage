@@ -14,6 +14,8 @@ npm run bookmontage -- prompt-search "仙侠 打斗" --model all --limit 5
 
 默认 `--model all`，返回短摘要；`--full` 返回完整提示词，`--refresh` 强制更新本地缓存，`--lang en` 切换英文目录。结果同时返回 `model`、成片链接、来源与许可证。站点将明确标注为 2.5 的新案例归入 2.5，其余归入可用于 2.0 的经典库，与站点的版本筛选逻辑一致。
 
+`npm run bookmontage -- prompt-search` 里的 `--` 是 npm 的“后续内容原样传给脚本”分隔符，`prompt-search` 是 BookMontage 子命令，因此不能写成 `--prompt-search`。
+
 ## 2.0 与 2.5 的提词复杂度
 
 2.0 不是使用另一种更复杂的“语法”。两代的核心结构都是主体、动作、镜头、场景、光线、声音和时间轴。区别在于：

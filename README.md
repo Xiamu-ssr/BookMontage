@@ -35,6 +35,8 @@ npm run dev
 
 Open the local URL printed by the dev server. The included **《浪浪山外传：天上来客》** library is a research-only fan-continuation experiment; film-derived references and their dependent drafts are marked copyright-sensitive and must be replaced before production.
 
+Story data is intentionally excluded from this public source repository. Clone the private data repository into `.bookmontage`, then run `npm run bookmontage -- export` before opening the workbench. Secrets are environment variables and never belong in either repository.
+
 ## CLI
 
 ```bash

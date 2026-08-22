@@ -38,7 +38,6 @@ next-env.d.ts
 /work/
 /public/media/
 
-# SQLite journals are runtime-only; the portable database itself is intentional.
-.bookmontage/*.sqlite-shm
-.bookmontage/*.sqlite-wal
-.bookmontage/cache/
+# Private story data lives in its own repository.
+/.bookmontage/
+/public/generated/library.json

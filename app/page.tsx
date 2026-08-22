@@ -229,6 +229,7 @@ export default function Home() {
   const [library, setLibrary] = useState<Snapshot | null>(null);
   const [loadError, setLoadError] = useState('');
   const [view, setView] = useState<View>('shelf');
+  const [selectedBookId, setSelectedBookId] = useState('');
   const [bookMode, setBookMode] = useState<BookMode>('world');
   const [worldTab, setWorldTab] = useState<WorldTab>('character');
   const [entityId, setEntityId] = useState('');
@@ -275,7 +276,8 @@ export default function Home() {
   }, [library]);
   const links = library?.links ?? [];
   const itemByLogicalId = (id: string) => items.find(item => item.id.slice(0, -4) === id.slice(0, -4));
-  const book = items.find(item => item.type === 'book');
+  const books = items.filter(item => item.type === 'book');
+  const book = books.find(item => item.id === selectedBookId) ?? books[0];
   const chapters = items.filter(item => item.type === 'chapter' && item.parent === book?.id);
   const chapter = chapters.find(item => item.id === chapterId) ?? chapters[0];
   const shots = items.filter(item => item.type === 'shot' && item.parent === chapter?.id);
@@ -345,6 +347,18 @@ export default function Home() {
     setPreviewMenuOpen(false);
   }
 
+  function openBook(item: Item) {
+    setSelectedBookId(item.id);
+    setBookMode('world');
+    setWorldTab('character');
+    setEntityId('');
+    setAssetIndex(0);
+    setChapterView('overview');
+    setChapterId('');
+    setShotIndex(0);
+    setView('book');
+  }
+
   if (!library || !book) return <main className="loading"><span>书间</span><p>{loadError || '正在读取藏书'}</p></main>;
 
   if (view === 'shelf') return <main className="home-stage">
@@ -356,10 +370,10 @@ export default function Home() {
     </header>
     <section className="bookshelf" aria-label="书架">
       <div className="shelf-lines" aria-hidden="true"><i/><i/><i/></div>
-      <button className="book-card" onClick={() => setView('book')} aria-label={`打开《${book.data.title}》`}>
-        <img src={mediaUrl(cover)} alt="" />
-        <span className="book-card-glass"><strong>{book.data.title}</strong><em>{book.data.subtitle}</em></span>
-      </button>
+      <div className="book-grid">{books.map(item => { const itemCover = items.find(candidate => candidate.id === item.data.cover); return <button key={item.id} className="book-card" onClick={() => openBook(item)} aria-label={`打开《${item.data.title}》`}>
+        <img src={mediaUrl(itemCover)} alt="" />
+        <span className="book-card-glass"><strong>{item.data.title}</strong><em>{item.data.subtitle}</em></span>
+      </button>; })}</div>
     </section>
     <DocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
   </main>;
