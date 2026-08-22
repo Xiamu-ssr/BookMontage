@@ -1,0 +1,4 @@
+interface:
+  display_name: "BookMontage"
+  short_description: "Operate a BookMontage story world through its local CLI."
+  default_prompt: "Open this BookMontage workspace and help me evolve the book without duplicating its source data."
