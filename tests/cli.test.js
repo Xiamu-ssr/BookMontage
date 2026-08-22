@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
@@ -78,4 +78,38 @@ test('stash keeps downloaded research in the disposable tmp library', () => {
 test('help exposes the Seedance example search command', () => {
   const home = mkdtempSync(join(tmpdir(), 'bookmontage-help-'));
   assert.match(run(home, 'help'), /prompt-search <keywords>/);
+  assert.match(run(home, 'help'), /--model all\|2\.5\|2\.0/);
+});
+
+test('prompt search keeps native 2.5 examples separate from the classic 2.0 catalog', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bookmontage-prompts-'));
+  mkdirSync(join(home, 'cache'), { recursive:true });
+  writeFileSync(join(home, 'cache', 'seedance-prompts-zh.md'), `### No. 1: Seedance 2.5 仙侠大战
+
+#### 📖 描述
+
+云层中的高速打斗
+
+#### 📝 提示词
+
+\`\`\`
+Seedance 2.5，仙侠人物在云层中高速打斗。
+\`\`\`
+
+### No. 2: 仙侠大战
+
+#### 📖 描述
+
+Seedance 2.0 经典仙侠打斗
+
+#### 📝 提示词
+
+\`\`\`
+仙侠人物在山巅之间打斗。
+\`\`\`
+`);
+  const native = JSON.parse(run(home, 'prompt-search', '仙侠', '--model', '2.5'));
+  const classic = JSON.parse(run(home, 'prompt-search', '仙侠', '--model', '2.0'));
+  assert.deepEqual(native.map(item => item.model), ['2.5']);
+  assert.deepEqual(classic.map(item => item.model), ['2.0']);
 });

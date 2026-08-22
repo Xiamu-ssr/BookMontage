@@ -2,7 +2,7 @@
 
 官方资料：[Seedance 2.5 发布说明与示例](https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5)
 
-实片参考：[Seedance 2 Prompts 中文站](https://seedance2prompts.com/zh)。先搜索相似成片及其长提示词，再按本页官方能力边界重写，比让 Harness 从空白猜测稳定。
+实片参考：[Seedance 2 Prompts 中文站](https://seedance2prompts.com/zh)。用 `bookmontage prompt-search <关键词> --model 2.5 --full` 优先搜索 2.5 原生成片及其长提示词，再按本页官方能力边界重写。
 
 ## 推荐写法
 

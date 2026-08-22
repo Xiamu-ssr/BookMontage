@@ -245,8 +245,7 @@ export default function Home() {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [graphId, setGraphId] = useState('');
   const [graphFullscreen, setGraphFullscreen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [copiedAssetId, setCopiedAssetId] = useState('');
+  const [copiedCardId, setCopiedCardId] = useState('');
 
   useEffect(() => {
     fetch('/generated/library.json', { cache: 'no-store' })
@@ -314,12 +313,12 @@ export default function Home() {
   const ambient = chapterFilm ?? clip;
   const remainingShots = Math.max(shots.length - shotIndex, 1);
 
-  async function copyHarnessTask() {
-    if (!shot) return;
-    const prompt = `请在 BookMontage 中处理 ${shot.data.path || shot.id}（ID: ${shot.id}）。读取项目 Skill 和关联资产，保留人类草稿意图，完善 story 与 body；写回 SQLite 后运行 bookmontage export 和 bookmontage verify，等待人类审核。`;
+  async function copyHarnessTask(item: Item) {
+    const scope = item.type === 'chapter' ? '章节' : '段落';
+    const prompt = `请在 BookMontage 中处理${scope} ${item.data.path || item.id}（ID: ${item.id}）。读取项目 Skill 和关联资产，保留人类草稿意图，完善可读叙事与模型指令；写回 SQLite 后运行 bookmontage export 和 bookmontage verify，等待人类审核。`;
     await navigator.clipboard.writeText(prompt);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    setCopiedCardId(item.id);
+    window.setTimeout(() => setCopiedCardId(current => current === item.id ? '' : current), 1600);
   }
 
   async function copyAssetPath(item?: Item) {
@@ -327,8 +326,8 @@ export default function Home() {
     const relative = String(item.data.file);
     const path = library?.data_root ? `${library.data_root}/${relative}` : `.bookmontage/${relative}`;
     await navigator.clipboard.writeText(`${item.data.title || relative}\n${path}`);
-    setCopiedAssetId(item.id);
-    window.setTimeout(() => setCopiedAssetId(current => current === item.id ? '' : current), 1600);
+    setCopiedCardId(item.id);
+    window.setTimeout(() => setCopiedCardId(current => current === item.id ? '' : current), 1600);
   }
 
   function selectShot(index: number) {
@@ -387,16 +386,16 @@ export default function Home() {
                 <MediaThumb item={thumbnail} />
                 <span><strong>{item.data.title}</strong></span>
               </button>
-              {thumbnail?.data.file && <button className="copy-path" onClick={() => copyAssetPath(thumbnail)} aria-label={`复制${thumbnail.data.title}的文件位置`} title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === thumbnail.id} /></button>}
+              {thumbnail?.data.file && <button className="copy-path" onClick={() => copyAssetPath(thumbnail)} aria-label={`复制${thumbnail.data.title}的文件位置`} title="复制名称与文件位置"><CopyIcon copied={copiedCardId === thumbnail.id} /></button>}
             </article>; })}</div>
           </div>
           <div className="book-seam" />
           <div className="glass-page asset-page">
-            {entity && entity.type === 'temp_asset' ? <><div className="asset-title-row"><h1>{entity.data.title}</h1><button className="copy-path detail-copy" onClick={() => copyAssetPath(entity)} aria-label="复制文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === entity.id} /></button></div><TempPreview item={entity} onZoom={(src, alt) => setLightbox({ src, alt })} /></> : entity && <>
+            {entity && entity.type === 'temp_asset' ? <><h1>{entity.data.title}</h1><TempPreview item={entity} onZoom={(src, alt) => setLightbox({ src, alt })} /></> : entity && <>
               <h1>{entity.data.title}</h1>
               {entityAssets.length > 0 ? <>
                 <div className="asset-switcher">{entityAssets.map((asset, index) => <button key={asset.id} className={assetIndex === index ? 'active' : ''} onClick={() => setAssetIndex(index)}>{asset.data.title}</button>)}</div>
-                <figure className="entity-visual"><button className="zoomable-media" onClick={() => setLightbox({ src: mediaUrl(entityAsset), alt: String(entityAsset?.data.title || entity.data.title) })} aria-label="全屏查看图片"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /></button><figcaption>{entityAsset?.data.title}</figcaption>{entityAsset?.data.file && <button className="copy-path figure-copy" onClick={() => copyAssetPath(entityAsset)} aria-label="复制文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === entityAsset.id} /></button>}</figure>
+                <figure className="entity-visual"><button className="zoomable-media" onClick={() => setLightbox({ src: mediaUrl(entityAsset), alt: String(entityAsset?.data.title || entity.data.title) })} aria-label="全屏查看图片"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /></button><figcaption>{entityAsset?.data.title}</figcaption></figure>
               </> : <div className="text-asset"><p>{entity.data.design}</p></div>}
             </>}
           </div>
@@ -421,7 +420,7 @@ export default function Home() {
         </nav>
         {chapterView === 'overview' ? <>
           <div className="glass-page chapter-index-page">
-            <div className="chapter-list">{chapters.map((item, index) => <button key={item.id} className={chapter?.id === item.id ? 'active' : ''} onClick={() => { setChapterId(item.id); setShotIndex(0); }}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.data.title}</strong></button>)}</div>
+            <div className="chapter-list">{chapters.map((item, index) => <article key={item.id} className={`chapter-card ${chapter?.id === item.id ? 'active' : ''}`}><button className="chapter-card-select" onClick={() => { setChapterId(item.id); setShotIndex(0); }}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.data.title}</strong></button><button className="copy-path" onClick={() => copyHarnessTask(item)} aria-label={`复制${item.data.title}的 Harness 任务`} title="复制章节任务"><CopyIcon copied={copiedCardId === item.id} /></button></article>)}</div>
           </div>
           <div className="book-seam" />
           <div className="glass-page chapter-overview-page">
@@ -429,10 +428,10 @@ export default function Home() {
           </div>
         </> : <>
           <div className="glass-page narrative-page">
-            <div className="story-list">{shots.map((item, index) => <button key={item.id} className={shot?.id === item.id ? 'active' : ''} onClick={() => selectShot(index)}>
+            <div className="story-list">{shots.map((item, index) => <article key={item.id} className={`story-card ${shot?.id === item.id ? 'active' : ''}`}><button className="story-card-select" onClick={() => selectShot(index)}>
               <h2>{item.data.title}</h2><p>{item.data.story}</p>
               {dialogueOf(item).map((line, quoteIndex) => <blockquote key={quoteIndex}>“{line}”</blockquote>)}
-            </button>)}</div>
+            </button><button className="copy-path" onClick={() => copyHarnessTask(item)} aria-label={`复制${item.data.title}的 Harness 任务`} title="复制段落任务"><CopyIcon copied={copiedCardId === item.id} /></button></article>)}</div>
           </div>
           <div className="book-seam" />
           <div className="glass-page preview-page">
@@ -444,11 +443,11 @@ export default function Home() {
             </nav>
             {previewTab === 'video' && <div className="video-view">
               <video key={displayClip?.id} controls autoPlay={filmScope === 'sequence'} src={mediaUrl(displayClip)} poster={mediaUrl(shotVisuals.at(-1) ?? cover)} onEnded={() => { if (filmScope === 'sequence' && sequenceOffset + 1 < previewCount) setSequenceOffset(sequenceOffset + 1); }} />
-              <div className="video-scope"><button className={filmScope === 'shot' ? 'active' : ''} onClick={() => { setFilmScope('shot'); setPreviewMenuOpen(false); }}>本段</button><span className="sequence-picker"><button className={filmScope === 'sequence' ? 'active' : ''} onClick={() => setPreviewMenuOpen(!previewMenuOpen)}>往后预演</button>{previewMenuOpen && <span className="sequence-menu">{Array.from({ length: remainingShots }, (_, index) => index + 1).map(count => <button key={count} onClick={() => startSequence(count)}>从本段起 · {count} 段</button>)}</span>}</span>{filmScope === 'sequence' && <em>{sequenceOffset + 1} / {previewCount}</em>}{displayClip?.data.file && <button className="copy-path video-copy" onClick={() => copyAssetPath(displayClip)} aria-label="复制视频文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === displayClip.id} /></button>}</div>
+              <div className="video-scope"><button className={filmScope === 'shot' ? 'active' : ''} onClick={() => { setFilmScope('shot'); setPreviewMenuOpen(false); }}>本段</button><span className="sequence-picker"><button className={filmScope === 'sequence' ? 'active' : ''} onClick={() => setPreviewMenuOpen(!previewMenuOpen)}>往后预演</button>{previewMenuOpen && <span className="sequence-menu">{Array.from({ length: remainingShots }, (_, index) => index + 1).map(count => <button key={count} onClick={() => startSequence(count)}>从本段起 · {count} 段</button>)}</span>}</span>{filmScope === 'sequence' && <em>{sequenceOffset + 1} / {previewCount}</em>}</div>
             </div>}
-            {previewTab === 'assets' && <div className="reference-grid">{shotRefs.map(ref => <article key={ref.id}>{ref.type === 'asset' && <img src={mediaUrl(ref)} alt="" />}<strong>{ref.data.title}</strong><span>{ref.type}</span>{ref.data.file && <button className="copy-path reference-copy" onClick={() => copyAssetPath(ref)} aria-label="复制文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === ref.id} /></button>}</article>)}</div>}
+            {previewTab === 'assets' && <div className="reference-grid">{shotRefs.map(ref => <article key={ref.id}>{ref.type === 'asset' && <img src={mediaUrl(ref)} alt="" />}<strong>{ref.data.title}</strong><span>{ref.type}</span></article>)}</div>}
             {previewTab === 'tech' && shot && <div className="tech-sheet"><dl><div><dt>模型</dt><dd>{shot.data.model}</dd></div><div><dt>时长</dt><dd>{shot.data.duration} 秒</dd></div><div><dt>状态</dt><dd>{shot.data.status}</dd></div><div className="wide"><dt>人类草稿</dt><dd>{shot.data.draft}</dd></div></dl></div>}
-            {previewTab === 'prompt' && shot && <div className="prompt-sheet"><section><h3>HEAD</h3>{shotRefs.map((ref, index) => <p key={ref.id}>@{index + 1}　{ref.data.title}</p>)}</section><section><h3>BODY</h3><p>{shot.data.body}</p></section><button onClick={copyHarnessTask}>{copied ? '已复制' : '复制给 Harness'}</button></div>}
+            {previewTab === 'prompt' && shot && <div className="prompt-sheet"><section><h3>HEAD</h3>{shotRefs.map((ref, index) => <p key={ref.id}>@{index + 1}　{ref.data.title}</p>)}</section><section><h3>BODY</h3><p>{shot.data.body}</p></section></div>}
           </div>
         </>}
       </>}

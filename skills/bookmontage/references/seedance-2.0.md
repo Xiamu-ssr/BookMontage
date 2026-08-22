@@ -2,7 +2,7 @@
 
 官方资料：[火山方舟提示词指南](https://www.volcengine.com/docs/82379/2222480?lang=zh)、[ByteDance Seed 发布说明](https://seed.bytedance.com/en/blog/seedance-2-0-%E6%AD%A3%E5%BC%8F%E5%8F%91%E5%B8%83)
 
-实片参考：[Seedance 2 Prompts 中文站](https://seedance2prompts.com/zh)。用 `bookmontage prompt-search <关键词> --full` 调取同类型长提示词，再结合当前资产改写。
+实片参考：[Seedance 2 Prompts 中文站](https://seedance2prompts.com/zh)。用 `bookmontage prompt-search <关键词> --model 2.0 --full` 调取同类型长提示词，再结合当前资产改写。
 
 ## 推荐写法
 

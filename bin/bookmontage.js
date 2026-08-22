@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { cacheRoot, dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, tmpRoot, verifyStore } from '../lib/store.js';
@@ -22,7 +22,7 @@ function help() {
   bookmontage list [type]
   bookmontage show <id|slug|path>
   bookmontage prompt <id|slug|path>
-  bookmontage prompt-search <keywords> [--limit 5] [--lang zh|en] [--full] [--refresh]
+  bookmontage prompt-search <keywords> [--model all|2.5|2.0] [--limit 5] [--lang zh|en] [--full] [--refresh]
   bookmontage revise <id> <patch.json>
   bookmontage links <id|slug|path>
   bookmontage relate <source> <kind> <target>
@@ -44,6 +44,8 @@ async function seedancePromptSearch(query) {
   if (!query?.trim()) throw new Error('prompt-search needs keywords, for example: prompt-search "仙侠 打斗"');
   const language = flag('lang', 'zh');
   if (!(language in seedanceCatalog)) throw new Error('--lang must be zh or en');
+  const model = flag('model', 'all');
+  if (!['all','2.5','2.0'].includes(model)) throw new Error('--model must be all, 2.5, or 2.0');
   const cacheFile = join(cacheRoot, `seedance-prompts-${language}.md`);
   const fresh = existsSync(cacheFile) && Date.now() - statSync(cacheFile).mtimeMs < 6 * 60 * 60 * 1000;
   let markdown;
@@ -53,6 +55,7 @@ async function seedancePromptSearch(query) {
       const response = await fetch(seedanceCatalog[language], { headers:{ 'User-Agent':'BookMontage/0.1 (+prompt research; CC BY 4.0)' } });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       markdown = await response.text();
+      mkdirSync(cacheRoot, { recursive:true });
       writeFileSync(cacheFile, markdown);
     } catch (error) {
       if (!existsSync(cacheFile)) throw new Error(`Seedance prompt catalog unavailable: ${error instanceof Error ? error.message : String(error)}`);
@@ -68,14 +71,16 @@ async function seedancePromptSearch(query) {
     const videoUrl = section.match(/href="(https:[^"]+\.mp4)"/)?.[1] || section.match(/\[🎬[^\]]*\]\((https:[^)]+)\)/)?.[1] || section.match(/https:\/\/youmind\.com\/[^\s)]+/)?.[0] || '';
     const catalogId = Number(section.match(/seedance-2-0-prompts\?id=(\d+)/)?.[1] || index + 1);
     const heading = title?.[1]?.trim() || '';
+    const version = /Seedance\s*2\.5/i.test(`${heading}\n${description}\n${prompt}`) ? '2.5' : '2.0';
     const haystack = `${heading}\n${description}\n${prompt}`.toLowerCase();
     const score = terms.reduce((total, term) => total + (heading.toLowerCase().includes(term) ? 8 : 0) + (description.toLowerCase().includes(term) ? 3 : 0) + (prompt.toLowerCase().includes(term) ? 1 : 0), 0);
-    return { id:catalogId, title:heading, description, prompt, video_url:videoUrl, score, haystack };
-  }).filter(item => item.score > 0).sort((left, right) => right.score - left.score || left.id - right.id);
+    return { id:catalogId, title:heading, description, prompt, video_url:videoUrl, version, score, haystack };
+  }).filter(item => item.score > 0 && (model === 'all' || item.version === model)).sort((left, right) => right.score - left.score || left.id - right.id);
   const limit = Math.max(1, Math.min(20, Number(flag('limit', '5')) || 5));
   const full = args.includes('--full');
   return matches.slice(0, limit).map(item => ({
     id:item.id,
+    model:item.version,
     title:item.title,
     description:item.description,
     video_url:item.video_url,

@@ -41,7 +41,7 @@ Open the local URL printed by the dev server. The included **《浪浪山外传�
 npm run bookmontage -- list [type]
 npm run bookmontage -- show <id|slug|path>
 npm run bookmontage -- prompt <id|slug|path>
-npm run bookmontage -- prompt-search "仙侠 打斗" --limit 3 --full
+npm run bookmontage -- prompt-search "仙侠 打斗" --model 2.5 --limit 3 --full
 npm run bookmontage -- revise <id> <patch.json>
 npm run bookmontage -- export
 npm run bookmontage -- verify
