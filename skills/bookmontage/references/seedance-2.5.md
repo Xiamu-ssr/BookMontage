@@ -2,6 +2,8 @@
 
 官方资料：[Seedance 2.5 发布说明与示例](https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5)
 
+实片参考：[Seedance 2 Prompts 中文站](https://seedance2prompts.com/zh)。先搜索相似成片及其长提示词，再按本页官方能力边界重写，比让 Harness 从空白猜测稳定。
+
 ## 推荐写法
 
 - 先列素材职责，再写时间轴：`@图片1` 锁角色、`@图片2` 锁场景、`@视频1` 只参考动作或运镜；不要让一份素材同时承担所有控制。

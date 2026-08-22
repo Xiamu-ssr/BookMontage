@@ -1,1 +1,0 @@
-../../skills/bookmontage/references/veo-3.1.md

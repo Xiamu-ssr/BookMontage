@@ -19,7 +19,7 @@ test('init is repeatable and export stays a derived cache', () => {
   run(home, 'init');
   run(home, 'init');
   const snapshot = JSON.parse(readFileSync(run(home, 'export').trim(), 'utf8'));
-  assert.deepEqual(snapshot, { format: 1, items: [], links: [] });
+  assert.deepEqual(snapshot, { format: 1, data_root: home, items: [], links: [] });
 });
 
 test('revising an upstream item marks dependent work stale', () => {
@@ -73,4 +73,9 @@ test('stash keeps downloaded research in the disposable tmp library', () => {
   assert.equal(item.data.media_type, 'document');
   assert.equal(readFileSync(join(home, item.data.file), 'utf8'), 'source-note');
   assert.deepEqual(JSON.parse(run(home, 'verify')).errors, []);
+});
+
+test('help exposes the Seedance example search command', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bookmontage-help-'));
+  assert.match(run(home, 'help'), /prompt-search <keywords>/);
 });

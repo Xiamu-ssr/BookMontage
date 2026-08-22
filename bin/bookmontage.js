@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
-import { dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, tmpRoot, verifyStore } from '../lib/store.js';
+import { cacheRoot, dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, tmpRoot, verifyStore } from '../lib/store.js';
 
 const [command = 'help', ...args] = process.argv.slice(2);
 
@@ -22,6 +22,7 @@ function help() {
   bookmontage list [type]
   bookmontage show <id|slug|path>
   bookmontage prompt <id|slug|path>
+  bookmontage prompt-search <keywords> [--limit 5] [--lang zh|en] [--full] [--refresh]
   bookmontage revise <id> <patch.json>
   bookmontage links <id|slug|path>
   bookmontage relate <source> <kind> <target>
@@ -29,9 +30,61 @@ function help() {
   bookmontage stash <url> --title <name> [--source <page>] [--book <selector>]
   bookmontage verify
   bookmontage doctor
-  bookmontage generate <shot-id> [--model sapiens-ai/agnes-video-v2.0] [--duration 10] [--resolution 720p]
+  bookmontage generate <shot-id> [--model bytedance/doubao-seedance-2.0] [--duration 10] [--resolution 720p]
   bookmontage compose <chapter-id>
 `);
+}
+
+const seedanceCatalog = {
+  zh:'https://raw.githubusercontent.com/YouMind-OpenLab/awesome-seedance-2-prompts/main/README_zh.md',
+  en:'https://raw.githubusercontent.com/YouMind-OpenLab/awesome-seedance-2-prompts/main/README.md',
+};
+
+async function seedancePromptSearch(query) {
+  if (!query?.trim()) throw new Error('prompt-search needs keywords, for example: prompt-search "仙侠 打斗"');
+  const language = flag('lang', 'zh');
+  if (!(language in seedanceCatalog)) throw new Error('--lang must be zh or en');
+  const cacheFile = join(cacheRoot, `seedance-prompts-${language}.md`);
+  const fresh = existsSync(cacheFile) && Date.now() - statSync(cacheFile).mtimeMs < 6 * 60 * 60 * 1000;
+  let markdown;
+  if (fresh && !args.includes('--refresh')) markdown = readFileSync(cacheFile, 'utf8');
+  else {
+    try {
+      const response = await fetch(seedanceCatalog[language], { headers:{ 'User-Agent':'BookMontage/0.1 (+prompt research; CC BY 4.0)' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      markdown = await response.text();
+      writeFileSync(cacheFile, markdown);
+    } catch (error) {
+      if (!existsSync(cacheFile)) throw new Error(`Seedance prompt catalog unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      markdown = readFileSync(cacheFile, 'utf8');
+    }
+  }
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const sections = markdown.split(/\n(?=### )/).filter(section => /^### /.test(section) && /#### [^\n]*(?:提示词|Prompt)/.test(section));
+  const matches = sections.map((section, index) => {
+    const title = section.match(/^###\s+(?:No\.\s+\d+:\s*)?(.+)$/m);
+    const description = section.match(/#### [^\n]*描述\s*\n+([\s\S]*?)(?=\n#### )/)?.[1].trim().replace(/\n+/g, ' ') || section.match(/^>\s+(.+)$/m)?.[1].trim() || '';
+    const prompt = section.match(/#### [^\n]*(?:提示词|Prompt)\s*\n+```[^\n]*\n([\s\S]*?)\n```/)?.[1].trim() || '';
+    const videoUrl = section.match(/href="(https:[^"]+\.mp4)"/)?.[1] || section.match(/\[🎬[^\]]*\]\((https:[^)]+)\)/)?.[1] || section.match(/https:\/\/youmind\.com\/[^\s)]+/)?.[0] || '';
+    const catalogId = Number(section.match(/seedance-2-0-prompts\?id=(\d+)/)?.[1] || index + 1);
+    const heading = title?.[1]?.trim() || '';
+    const haystack = `${heading}\n${description}\n${prompt}`.toLowerCase();
+    const score = terms.reduce((total, term) => total + (heading.toLowerCase().includes(term) ? 8 : 0) + (description.toLowerCase().includes(term) ? 3 : 0) + (prompt.toLowerCase().includes(term) ? 1 : 0), 0);
+    return { id:catalogId, title:heading, description, prompt, video_url:videoUrl, score, haystack };
+  }).filter(item => item.score > 0).sort((left, right) => right.score - left.score || left.id - right.id);
+  const limit = Math.max(1, Math.min(20, Number(flag('limit', '5')) || 5));
+  const full = args.includes('--full');
+  return matches.slice(0, limit).map(item => ({
+    id:item.id,
+    title:item.title,
+    description:item.description,
+    video_url:item.video_url,
+    rank:item.score,
+    ...(full ? { prompt:item.prompt } : { prompt_excerpt:`${item.prompt.slice(0, 360)}${item.prompt.length > 360 ? '…' : ''}` }),
+    catalog:'https://seedance2prompts.com/zh',
+    source:'https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts',
+    license:'CC BY 4.0',
+  }));
 }
 
 const mimeExtensions = {
@@ -134,7 +187,7 @@ async function generateVideo(selector) {
   const db = openStore();
   const shot = findItem(db, selector);
   if (shot.type !== 'shot') throw new Error(`${selector} is not a shot`);
-  const model = flag('model', 'sapiens-ai/agnes-video-v2.0');
+  const model = flag('model', 'bytedance/doubao-seedance-2.0');
   const duration = Number(flag('duration', '10'));
   const resolution = flag('resolution', '720p');
   const refs = db.prepare(`
@@ -246,6 +299,8 @@ try {
   } else if (command === 'prompt') {
     const db = openStore(); const item = findItem(db,args[0]); db.close();
     console.log(`请在 BookMontage 中处理 ${item.data.path || item.id}（ID: ${item.id}）。读取项目 Skill 和关联资产，保留人类草稿意图，完成后写回 SQLite、运行 bookmontage export 与 bookmontage verify，并将结果留给人类审核。`);
+  } else if (command === 'prompt-search') {
+    console.log(JSON.stringify(await seedancePromptSearch(args[0]), null, 2));
   } else if (command === 'revise') console.log(reviseItem(args[0],args[1]));
   else if (command === 'links') console.log(listItemLinks(args[0]));
   else if (command === 'relate') console.log(relationCommand('add',args[0],args[1],args[2]));

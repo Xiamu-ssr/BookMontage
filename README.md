@@ -33,7 +33,7 @@ npm run bookmontage -- export
 npm run dev
 ```
 
-Open the local URL printed by the dev server. The included sample book is **《浪浪山外传：天上来客》**, an original, transformative fan-continuation concept with newly generated visual assets; it is not affiliated with the film's creators.
+Open the local URL printed by the dev server. The included **《浪浪山外传：天上来客》** library is a research-only fan-continuation experiment; film-derived references and their dependent drafts are marked copyright-sensitive and must be replaced before production.
 
 ## CLI
 
@@ -41,6 +41,7 @@ Open the local URL printed by the dev server. The included sample book is **《�
 npm run bookmontage -- list [type]
 npm run bookmontage -- show <id|slug|path>
 npm run bookmontage -- prompt <id|slug|path>
+npm run bookmontage -- prompt-search "仙侠 打斗" --limit 3 --full
 npm run bookmontage -- revise <id> <patch.json>
 npm run bookmontage -- export
 npm run bookmontage -- verify
@@ -60,7 +61,7 @@ export NODE_USE_ENV_PROXY=1                 # only when a local proxy is needed
 export HTTPS_PROXY=http://127.0.0.1:7890   # example Clash Verge address
 
 npm run bookmontage -- generate <shot-id> \
-  --model sapiens-ai/agnes-video-v2.0 \
+  --model bytedance/doubao-seedance-2.0 \
   --duration 10 \
   --resolution 720p
 ```
@@ -73,7 +74,9 @@ Generated clips are candidate assets. They do not become “approved” merely b
 The concise project Skill is at [`skills/bookmontage/SKILL.md`](skills/bookmontage/SKILL.md). It routes to model-specific notes only when needed:
 
 - [Seedance 2.5](skills/bookmontage/references/seedance-2.5.md)
+- [Seedance 2.0](skills/bookmontage/references/seedance-2.0.md)
 - [MiniMax H3](skills/bookmontage/references/minimax-h3.md)
+- [Seedance 实片库与检索命令](skills/bookmontage/references/prompt-libraries.md)
 
 ## Verification
 

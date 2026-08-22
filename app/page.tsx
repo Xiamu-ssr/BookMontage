@@ -12,7 +12,7 @@ type ItemData = Record<string, unknown> & {
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
-type Snapshot = { format: number; items: Item[]; links: Link[] };
+type Snapshot = { format: number; data_root?: string; items: Item[]; links: Link[] };
 type View = 'shelf' | 'book';
 type BookMode = 'world' | 'chapter';
 type WorldTab = 'character' | 'location' | 'faction' | 'prop' | 'relation' | 'temp';
@@ -28,9 +28,7 @@ const docs = [
   { id: 'seedance25', title: 'Seedance 2.5', file: '/docs/seedance-2.5.md' },
   { id: 'seedance20', title: 'Seedance 2.0', file: '/docs/seedance-2.0.md' },
   { id: 'minimax', title: 'MiniMax H3', file: '/docs/minimax-h3.md' },
-  { id: 'gemini', title: 'Gemini Omni Flash', file: '/docs/gemini-omni-flash.md' },
-  { id: 'veo31', title: 'Veo 3.1', file: '/docs/veo-3.1.md' },
-  { id: 'prompt-libraries', title: '提示词参考库', file: '/docs/prompt-libraries.md' },
+  { id: 'prompt-libraries', title: 'Seedance 实片库', file: '/docs/prompt-libraries.md' },
 ];
 
 const worldTabs: { id: WorldTab; title: string }[] = [
@@ -65,6 +63,10 @@ function MediaThumb({ item }: { item?: Item }) {
   if (item.type !== 'temp_asset' || ['image','gif'].includes(String(item.data.media_type))) return <img src={mediaUrl(item)} alt="" />;
   if (item.data.media_type === 'video') return <video src={mediaUrl(item)} muted playsInline preload="metadata" />;
   return <span className="file-thumb">{String(item.data.file || '').split('.').pop()?.toUpperCase() || 'FILE'}</span>;
+}
+
+function CopyIcon({ copied = false }: { copied?: boolean }) {
+  return <span aria-hidden="true">{copied ? '✓' : '⧉'}</span>;
 }
 
 function TempPreview({ item, onZoom }: { item: Item; onZoom: (src: string, alt: string) => void }) {
@@ -244,6 +246,7 @@ export default function Home() {
   const [graphId, setGraphId] = useState('');
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedAssetId, setCopiedAssetId] = useState('');
 
   useEffect(() => {
     fetch('/generated/library.json', { cache: 'no-store' })
@@ -319,6 +322,15 @@ export default function Home() {
     window.setTimeout(() => setCopied(false), 1600);
   }
 
+  async function copyAssetPath(item?: Item) {
+    if (!item?.data.file) return;
+    const relative = String(item.data.file);
+    const path = library?.data_root ? `${library.data_root}/${relative}` : `.bookmontage/${relative}`;
+    await navigator.clipboard.writeText(`${item.data.title || relative}\n${path}`);
+    setCopiedAssetId(item.id);
+    window.setTimeout(() => setCopiedAssetId(current => current === item.id ? '' : current), 1600);
+  }
+
   function selectShot(index: number) {
     setShotIndex(index);
     setPreviewTab('video');
@@ -370,18 +382,21 @@ export default function Home() {
         <nav className="side-bookmarks" aria-label="全局资产类别">{worldTabs.map(tab => <button key={tab.id} className={worldTab === tab.id ? 'active' : ''} onClick={() => { setWorldTab(tab.id); setEntityId(''); setAssetIndex(0); }}>{tab.title}</button>)}</nav>
         {worldTab !== 'relation' ? <>
           <div className="glass-page entity-page">
-            <div className="entity-list">{worldItems.map(item => <button key={item.id} className={entity?.id === item.id ? 'active' : ''} onClick={() => { setEntityId(item.id); setAssetIndex(0); }}>
-              <MediaThumb item={thumbnailFor(item)} />
-              <span><strong>{item.data.title}</strong></span>
-            </button>)}</div>
+            <div className="entity-list asset-list">{worldItems.map(item => { const thumbnail = thumbnailFor(item); return <article key={item.id} className={`entity-card ${entity?.id === item.id ? 'active' : ''}`}>
+              <button className="entity-card-select" onClick={() => { setEntityId(item.id); setAssetIndex(0); }}>
+                <MediaThumb item={thumbnail} />
+                <span><strong>{item.data.title}</strong></span>
+              </button>
+              {thumbnail?.data.file && <button className="copy-path" onClick={() => copyAssetPath(thumbnail)} aria-label={`复制${thumbnail.data.title}的文件位置`} title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === thumbnail.id} /></button>}
+            </article>; })}</div>
           </div>
           <div className="book-seam" />
           <div className="glass-page asset-page">
-            {entity && entity.type === 'temp_asset' ? <><h1>{entity.data.title}</h1><TempPreview item={entity} onZoom={(src, alt) => setLightbox({ src, alt })} /></> : entity && <>
+            {entity && entity.type === 'temp_asset' ? <><div className="asset-title-row"><h1>{entity.data.title}</h1><button className="copy-path detail-copy" onClick={() => copyAssetPath(entity)} aria-label="复制文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === entity.id} /></button></div><TempPreview item={entity} onZoom={(src, alt) => setLightbox({ src, alt })} /></> : entity && <>
               <h1>{entity.data.title}</h1>
               {entityAssets.length > 0 ? <>
                 <div className="asset-switcher">{entityAssets.map((asset, index) => <button key={asset.id} className={assetIndex === index ? 'active' : ''} onClick={() => setAssetIndex(index)}>{asset.data.title}</button>)}</div>
-                <figure className="entity-visual"><button className="zoomable-media" onClick={() => setLightbox({ src: mediaUrl(entityAsset), alt: String(entityAsset?.data.title || entity.data.title) })} aria-label="全屏查看图片"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /></button><figcaption>{entityAsset?.data.title}</figcaption></figure>
+                <figure className="entity-visual"><button className="zoomable-media" onClick={() => setLightbox({ src: mediaUrl(entityAsset), alt: String(entityAsset?.data.title || entity.data.title) })} aria-label="全屏查看图片"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /></button><figcaption>{entityAsset?.data.title}</figcaption>{entityAsset?.data.file && <button className="copy-path figure-copy" onClick={() => copyAssetPath(entityAsset)} aria-label="复制文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === entityAsset.id} /></button>}</figure>
               </> : <div className="text-asset"><p>{entity.data.design}</p></div>}
             </>}
           </div>
@@ -429,9 +444,9 @@ export default function Home() {
             </nav>
             {previewTab === 'video' && <div className="video-view">
               <video key={displayClip?.id} controls autoPlay={filmScope === 'sequence'} src={mediaUrl(displayClip)} poster={mediaUrl(shotVisuals.at(-1) ?? cover)} onEnded={() => { if (filmScope === 'sequence' && sequenceOffset + 1 < previewCount) setSequenceOffset(sequenceOffset + 1); }} />
-              <div className="video-scope"><button className={filmScope === 'shot' ? 'active' : ''} onClick={() => { setFilmScope('shot'); setPreviewMenuOpen(false); }}>本段</button><span className="sequence-picker"><button className={filmScope === 'sequence' ? 'active' : ''} onClick={() => setPreviewMenuOpen(!previewMenuOpen)}>往后预演</button>{previewMenuOpen && <span className="sequence-menu">{Array.from({ length: remainingShots }, (_, index) => index + 1).map(count => <button key={count} onClick={() => startSequence(count)}>从本段起 · {count} 段</button>)}</span>}</span>{filmScope === 'sequence' && <em>{sequenceOffset + 1} / {previewCount}</em>}</div>
+              <div className="video-scope"><button className={filmScope === 'shot' ? 'active' : ''} onClick={() => { setFilmScope('shot'); setPreviewMenuOpen(false); }}>本段</button><span className="sequence-picker"><button className={filmScope === 'sequence' ? 'active' : ''} onClick={() => setPreviewMenuOpen(!previewMenuOpen)}>往后预演</button>{previewMenuOpen && <span className="sequence-menu">{Array.from({ length: remainingShots }, (_, index) => index + 1).map(count => <button key={count} onClick={() => startSequence(count)}>从本段起 · {count} 段</button>)}</span>}</span>{filmScope === 'sequence' && <em>{sequenceOffset + 1} / {previewCount}</em>}{displayClip?.data.file && <button className="copy-path video-copy" onClick={() => copyAssetPath(displayClip)} aria-label="复制视频文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === displayClip.id} /></button>}</div>
             </div>}
-            {previewTab === 'assets' && <div className="reference-grid">{shotRefs.map(ref => <article key={ref.id}>{ref.type === 'asset' && <img src={mediaUrl(ref)} alt="" />}<strong>{ref.data.title}</strong><span>{ref.type}</span></article>)}</div>}
+            {previewTab === 'assets' && <div className="reference-grid">{shotRefs.map(ref => <article key={ref.id}>{ref.type === 'asset' && <img src={mediaUrl(ref)} alt="" />}<strong>{ref.data.title}</strong><span>{ref.type}</span>{ref.data.file && <button className="copy-path reference-copy" onClick={() => copyAssetPath(ref)} aria-label="复制文件位置" title="复制名称与文件位置"><CopyIcon copied={copiedAssetId === ref.id} /></button>}</article>)}</div>}
             {previewTab === 'tech' && shot && <div className="tech-sheet"><dl><div><dt>模型</dt><dd>{shot.data.model}</dd></div><div><dt>时长</dt><dd>{shot.data.duration} 秒</dd></div><div><dt>状态</dt><dd>{shot.data.status}</dd></div><div className="wide"><dt>人类草稿</dt><dd>{shot.data.draft}</dd></div></dl></div>}
             {previewTab === 'prompt' && shot && <div className="prompt-sheet"><section><h3>HEAD</h3>{shotRefs.map((ref, index) => <p key={ref.id}>@{index + 1}　{ref.data.title}</p>)}</section><section><h3>BODY</h3><p>{shot.data.body}</p></section><button onClick={copyHarnessTask}>{copied ? '已复制' : '复制给 Harness'}</button></div>}
           </div>
