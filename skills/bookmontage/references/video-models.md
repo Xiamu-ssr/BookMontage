@@ -1,35 +1,30 @@
-# 视频模型横评
+# 视频模型选择
 
-价格为 2026-08-22 从 ZenMux 模型页读取的 5 秒估算，并不是套餐承诺；音频、清晰度、参考视频和模型档位会改变实付。
+BookMontage 当前保留 Seedance 2.5、Seedance 2.0 与 MiniMax H3。其余横评模型已经过实片淘汰，不再出现在生产手册和素材库中。
 
-| 模型 | 5 秒估算 | 最有价值的输入能力 | 适用判断 |
-| --- | --- | --- | --- |
-| MiniMax H3 | `$0.37–0.5925` | Ref2VA 最多 9 图、3 视频、3 音频，总计 12 份媒体；用 `<Picture 1>` 等标签绑定 | 当前最完整的多模态角色/动作/声音参考；ZenMux 本轮要求 768p 或 2K |
-| Seedance 2.0 | 约 `$0.81` | ZenMux `content` 可传参考图、视频、音频并标注角色 | 质量基线；动作与多素材理解强，但较贵 |
-| SkyReels V4 | `$0.60–0.70` | 原模型统一接收文本、图、视频、遮罩与音频 | 编辑能力强；第三方端点透传程度仍需实测 |
-| PixVerse V6 | 约 `$0.25–2.30` | T2V、I2V、首尾帧、Fusion 参考、视频延长 | 通用叙事；功能比 C1 全，价格跨度大 |
-| PixVerse C1 | 约 `$0.30–1.20` | 图生、首尾帧、Fusion、分镜面板 | 更偏电影动作、追逐、打斗与 VFX；不支持延长 |
-| Agnes V2 | 约 `$0.025` | 单图 I2V；多图主要是 keyframes 模式，不等于角色/场景语义引用 | 只适合廉价预演，占位质量已实测偏低 |
+## 实测价格
 
-## V6 和 C1 的本质区别
+2026-08-22，同一组 5 秒、16:9、有声测试：
 
-V6 是通用生产模型：生活叙事、人物镜头、首尾帧、延长、Fusion 都覆盖。C1 是动作摄影专模：官方特别强调高速追踪、物理运动、战斗接触、破坏和视觉特效；最高 15 秒、1080p、有声，但没有视频延长。
+| 模型 | 实付 | 同规格 10 秒推算 |
+| --- | ---: | ---: |
+| Seedance 2.0 · 720p | `$0.736698` | `$1.473396` |
+| MiniMax H3 · 768p | `$0.370000` | `$0.740000` |
 
-官方积分也能看出定位：720p 有声时，V6 每秒 12 credits，C1 每秒 13 credits；1080p 有声分别为 23 与 24。C1 只是略贵，不是另一套完全不同的计费等级。
+10 秒价格是按同清晰度、同音频和同输入模式线性外推，不是套餐承诺。ZenMux 账单是最终事实源。
 
-## `@素材` 怎么统一
+## Seedance 2.0 与 2.5
 
-`@角色图` 是 BookMontage 的人类可读语法，不应直接假设每家接口都认同一个字符：
+- ZenMux 当前标示 Seedance 2.0 为 `$2.353–7.5002 / M tokens`，Seedance 2.5 为 `$6.4–11.7 / M tokens`。
+- 价格区间不能直接等同某条视频的成交价；清晰度、音频、视频输入和供应商档位会同时改变 token 数量或单价。
+- 按相同档位比较（最低档对最低档、最高档对最高档），2.5 的 token 单价约为 2.0 的 `1.56–2.72 倍`；跨档位不能直接相除。
+- 本次 2.0 的 5 秒 720p 有声片产生 `108,900 tokens`。若 2.5 生成完全相同数量的 tokens，按其当前公开区间估算：5 秒约 `$0.697–1.274`，10 秒约 `$1.394–2.548`。这不是实付，仍需一笔 2.5 账单校准。
 
-- MiniMax H3 编译成 `<Picture 1>`、`<Video 1>`、`<Audio 1>`。
-- Seedance 经 ZenMux 编译成有 `role` 的 `content` 项，并在正文中用图片编号绑定职责。
-- PixVerse 编译成 `image_references` / Fusion 输入；C1 的分镜面板另走 storyboard 输入。
-- SkyReels 按图、视频、遮罩和音频的原生模态映射；ZenMux Vertex 端点本轮明确要求在提示词中写 `@image_1`、`@image_2`。网关未暴露的字段必须报错，不能静默丢失。
+## 成本规律
 
-因此书里的 Head 永远只保存稳定资产引用；模型适配器负责把它翻译成供应商语法。人不用记六套接口，也不会因换模型改写故事数据。
+- 时长：同一档位内近似线性。5 秒翻到 10 秒约为两倍，不是指数增长；极短任务可能受最小计费或取整影响。
+- 分辨率：明显影响成本。视频 token 通常随帧数和画面像素量增长，因此 1080p 不只是比 720p 多 50%；像素面积是 `2.25 倍`。网关可能再叠加档位系数，不能机械保证恰好 2.25 倍。
+- 帧率：若模型或接口允许改变，通常也近似线性影响生成量；ZenMux 当前 Seedance 原生接口没有把帧率列为用户字段。
+- 音频与输入模式：有声、参考视频或复杂多模态输入可能进入不同费率档。
 
-## 本轮试片
-
-临时素材中标题以“模型试片”开头的视频，H3、Seedance、SkyReels、V6 与 C1 使用相同的三张参考图和同一提示词，5 秒、有声；H3 按接口要求为 768p，其余请求 720p。Agnes 的 ZenMux 端点不能把三张图作为角色/场景语义参考，所以降级为只使用场景首帧，界面会明确标注，不能把它的角色稳定性与前五个直接横比。比较时依次看：角色数量、角色身份、动作位移、肢体粘连、场景遵循、声音同步。不要只看单帧是否精美。
-
-官方资料：[MiniMax H3](https://github.com/MiniMax-AI/MiniMax-H3)、[PixVerse C1](https://docs.platform.pixverse.ai/c1-2067883m0)、[PixVerse 价格表](https://docs.platform.pixverse.ai/pricing-796039m0)、[SkyReels V4 论文](https://arxiv.org/abs/2602.21818)、[ZenMux 模型目录](https://zenmux.ai/models)
+官方资料：[ZenMux Seedance 2.5](https://zenmux.ai/bytedance/doubao-seedance-2.5)、[ZenMux Seedance 2.0 对比页](https://zenmux.ai/compare?model=bytedance%2Fdoubao-seedance-2.0%3Avolcengine)、[ZenMux 视频接口](https://zenmux.ai/docs/api/zenmux/generate-videos-native.html)、[火山引擎 Seedance 2.0](https://www.volcengine.com/activity/seedance2)、[MiniMax H3](https://github.com/MiniMax-AI/MiniMax-H3)

@@ -1,1 +1,0 @@
-../../skills/bookmontage/references/pixverse-v6-c1.md

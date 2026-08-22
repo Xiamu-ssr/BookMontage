@@ -7,10 +7,6 @@ import { dataRoot, exportSnapshot, findItem, makeId, openStore, putItem, putLink
 const models = [
   ['minimax/minimax-h3', 'MiniMax H3'],
   ['bytedance/doubao-seedance-2.0', 'Seedance 2.0'],
-  ['skyreels/skyreels-v4', 'SkyReels V4'],
-  ['pixverse/v6', 'PixVerse V6'],
-  ['pixverse/c1', 'PixVerse C1'],
-  ['sapiens-ai/agnes-video-v2.0', 'Agnes V2'],
 ];
 
 const prompt = `5秒、16:9、唯美东方幻想 CG、连贯单镜头。<Picture 1>只负责白衣女剑士的脸、短发、服装和身材；<Picture 2>只负责黑衣女剑士的脸、长发、服装和身材；<Picture 3>只负责月蚀花园、水面石台与冷金色月光。0–1秒，两人相隔八米对峙。1–2秒，白衣女剑士突然瞬移八米到黑衣女剑士右后方，身体沿清晰可见的完整路径高速掠过，白金羽流拖尾。2–3.5秒，白衣女剑士挥出一记带白金法力的横向掌击；黑衣女剑士立即转身，用双臂展开直径两米的半透明玄黑圆盾，掌击必须在盾面产生一次清晰接触、压缩与爆炸。3.5–5秒，黑衣女剑士连人带盾被冲击波水平击退六米，双脚划过浅水形成两道连续水痕，白衣女剑士顺势追击半步，镜头高速横移跟拍后停在双人中景。两人外观必须分别服从自己的角色图，不能换脸、换装、融合或增减人物。无对白；若模型支持音频，只生成瞬移破风、盾面重击、低频冲击和水花声。禁止慢动作、原地互推、普通拳脚、肢体粘连、忽然切镜、文字、字幕、标志和水印。`;
@@ -27,7 +23,7 @@ function imageInput(item) {
 async function generate(model, title, book, references) {
   const resolution = model === 'minimax/minimax-h3' ? '768p' : '720p';
   const images = references.map(imageInput);
-  const requestImages = model === 'sapiens-ai/agnes-video-v2.0' ? [images[2]] : images;
+  const requestImages = images;
   const body = {
     model,
     content: [{ type: 'text', text: prompt }, ...requestImages.map(image => ({
@@ -62,11 +58,7 @@ async function generate(model, title, book, references) {
   } else if (create.status === 404 && created.error?.type === 'model_not_supported') {
     const [provider, ...modelParts] = model.split('/');
     const modelName = modelParts.join('/');
-    const vertexPrompt = model === 'skyreels/skyreels-v4'
-      ? prompt.replaceAll('<Picture 1>', '@image_1').replaceAll('<Picture 2>', '@image_2').replaceAll('<Picture 3>', '@image_3')
-      : model === 'sapiens-ai/agnes-video-v2.0'
-      ? prompt.replaceAll('<Picture 1>', '白衣女剑士的设定').replaceAll('<Picture 2>', '黑衣女剑士的设定').replaceAll('<Picture 3>', '输入首帧')
-      : prompt;
+    const vertexPrompt = prompt;
     const parameters = { aspectRatio: '16:9', resolution, durationSeconds: 5, generateAudio: true, sampleCount: 1 };
     const instance = {
       prompt: vertexPrompt,
@@ -125,9 +117,7 @@ async function generate(model, title, book, references) {
     model,
     duration: 5,
     resolution,
-    note: model === 'sapiens-ai/agnes-video-v2.0'
-      ? `Agnes 端点不能把三图当角色/场景语义引用，本片仅使用场景首帧；${resolution}、有声；任务 ${jobId}`
-      : `同一提示词、同三张参考图、${resolution}、有声；任务 ${jobId}`,
+    note: `同一提示词、同三张参考图、${resolution}、有声；任务 ${jobId}`,
     prompt,
   } });
   for (const reference of references) putLink(db, { source: id, target: reference.id, kind: 'derived_from' });

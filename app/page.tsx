@@ -8,7 +8,7 @@ type ItemData = Record<string, unknown> & {
   story?: string; draft?: string; body?: string; file?: string; design?: string;
   voice?: string; role?: string; duration?: number; model?: string; status?: string; cover?: string;
   mime?: string; media_type?: string; source_url?: string; source_page?: string; note?: string;
-  types?: string[]; nodes?: string[]; copyright_sensitive?: boolean;
+  types?: string[]; nodes?: string[]; kinds?: string[]; copyright_sensitive?: boolean;
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
@@ -28,9 +28,6 @@ const docs = [
   { id: 'seedance25', title: 'Seedance 2.5', file: '/docs/seedance-2.5.md' },
   { id: 'seedance20', title: 'Seedance 2.0', file: '/docs/seedance-2.0.md' },
   { id: 'minimax', title: 'MiniMax H3', file: '/docs/minimax-h3.md' },
-  { id: 'pixverse', title: 'PixVerse V6 / C1', file: '/docs/pixverse-v6-c1.md' },
-  { id: 'skyreels', title: 'SkyReels V4', file: '/docs/skyreels-v4.md' },
-  { id: 'agnes', title: 'Agnes Video 2.0', file: '/docs/agnes-video-2.md' },
   { id: 'gemini', title: 'Gemini Omni Flash', file: '/docs/gemini-omni-flash.md' },
 ];
 
@@ -299,7 +296,7 @@ export default function Home() {
     return (relationGraph?.data.types ?? ['character','faction','relic']).includes(item.type) && item.parent === book?.id;
   });
   const graphNodeIds = new Set(graphNodes.map(item => item.id));
-  const graphEdges = relationEdges.filter(edge => graphNodeIds.has(edge.sourceItem.id) && graphNodeIds.has(edge.targetItem.id));
+  const graphEdges = relationEdges.filter(edge => graphNodeIds.has(edge.sourceItem.id) && graphNodeIds.has(edge.targetItem.id) && (!relationGraph?.data.kinds?.length || relationGraph.data.kinds.includes(edge.kind)));
   const graphMedia = new Map(graphNodes.map(node => [node.id, mediaUrl(node.type === 'temp_asset' ? node : assetsFor(node)[0])]));
   const ambient = chapterFilm ?? clip;
   const remainingShots = Math.max(shots.length - shotIndex, 1);
@@ -365,7 +362,7 @@ export default function Home() {
           <div className="glass-page entity-page">
             <div className="entity-list">{worldItems.map(item => <button key={item.id} className={entity?.id === item.id ? 'active' : ''} onClick={() => { setEntityId(item.id); setAssetIndex(0); }}>
               <MediaThumb item={thumbnailFor(item)} />
-              <span><strong>{item.data.title}</strong><small>{item.data.role || typeLabels[item.type]}</small></span>
+              <span><strong>{item.data.title}</strong></span>
             </button>)}</div>
           </div>
           <div className="book-seam" />
@@ -381,8 +378,8 @@ export default function Home() {
         </> : <>
           <div className="glass-page entity-page relation-index">
             <div className="entity-list graph-list">{relationGraphs.map(item => <button key={item.id} className={relationGraph?.id === item.id ? 'active' : ''} onClick={() => setGraphId(item.id)}>
-              <i className="graph-thumb">⌘</i>
-              <span><strong>{item.data.title}</strong><small>Graph</small></span>
+              <i className="graph-thumb"><b>{String(item.data.title || '').startsWith('角色') ? '人' : '盟'}</b><span><em/><em/><em/></span></i>
+              <span><strong>{item.data.title}</strong></span>
             </button>)}</div>
           </div>
           <div className="book-seam" />
