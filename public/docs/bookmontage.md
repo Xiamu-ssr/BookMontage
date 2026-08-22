@@ -1,0 +1,1 @@
+../../skills/bookmontage/SKILL.md

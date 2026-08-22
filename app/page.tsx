@@ -1,49 +1,115 @@
 'use client';
-/* eslint-disable @next/next/no-img-element -- local mutable assets should not be copied into an optimizer cache */
+/* eslint-disable @next/next/no-img-element -- local mutable assets should not enter an image optimizer cache */
 
 import { useEffect, useMemo, useState } from 'react';
 
 type ItemData = Record<string, unknown> & {
   title?: string; slug?: string; path?: string; subtitle?: string; summary?: string;
-  story?: string; draft?: string; body?: string; file?: string; prompt?: string;
-  design?: string; voice?: string; role?: string; state?: string; duration?: number;
-  model?: string; status?: string; cover?: string;
+  story?: string; draft?: string; body?: string; file?: string; design?: string;
+  voice?: string; role?: string; duration?: number; model?: string; status?: string; cover?: string;
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
 type Snapshot = { format: number; items: Item[]; links: Link[] };
-type ShelfView = 'shelf' | 'book';
-type BookTab = 'world' | 'chapters';
-type PreviewTab = 'film' | 'assets' | 'spec';
-type WorldTab = 'character' | 'location' | 'faction' | 'system' | 'relic';
+type View = 'shelf' | 'book';
+type BookMode = 'world' | 'chapter';
+type WorldTab = 'character' | 'location' | 'faction' | 'prop';
+type PreviewTab = 'video' | 'assets' | 'tech' | 'prompt';
+type FilmScope = 'shot' | 'chapter';
 
-const worldTabs: { id: WorldTab; label: string; sigil: string }[] = [
-  { id: 'character', label: '角色', sigil: '人' },
-  { id: 'location', label: '山河', sigil: '境' },
-  { id: 'faction', label: '阵营', sigil: '盟' },
-  { id: 'system', label: '术法', sigil: '法' },
-  { id: 'relic', label: '灵物', sigil: '器' },
+const docs = [
+  { id: 'bookmontage', title: 'BookMontage 使用手册', file: '/docs/bookmontage.md' },
+  { id: 'seedance', title: 'Seedance 2.5', file: '/docs/seedance-2.5.md' },
+  { id: 'minimax', title: 'MiniMax H3', file: '/docs/minimax-h3.md' },
+];
+
+const worldTabs: { id: WorldTab; title: string }[] = [
+  { id: 'character', title: '角色' },
+  { id: 'location', title: '地图' },
+  { id: 'faction', title: '阵营' },
+  { id: 'prop', title: '道具' },
 ];
 
 function mediaUrl(item?: Item) {
-  if (!item?.data.file) return '';
-  return `/book-assets/${String(item.data.file).split('/').pop()}`;
+  return item?.data.file ? `/book-assets/${String(item.data.file).split('/').pop()}` : '';
 }
 
-function shortVersion(id?: string) {
-  return id ? `v${Number(id.slice(-4))}` : 'v—';
+function dialogueOf(item?: Item) {
+  return [...String(item?.data.body || '').matchAll(/[‘“']([^’”']+)[’”']/g)].map(match => match[1]);
+}
+
+function InlineMarkdown({ text }: { text: string }) {
+  const nodes: React.ReactNode[] = [];
+  const expression = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|`([^`]+)`/g;
+  let cursor = 0;
+  for (const match of text.matchAll(expression)) {
+    const start = match.index ?? 0;
+    if (start > cursor) nodes.push(text.slice(cursor, start));
+    if (match[1]) nodes.push(<a key={start} href={match[2]} target="_blank" rel="noreferrer">{match[1]}</a>);
+    else nodes.push(<code key={start}>{match[3]}</code>);
+    cursor = start + match[0].length;
+  }
+  nodes.push(text.slice(cursor));
+  return <>{nodes}</>;
+}
+
+function MarkdownView({ source }: { source: string }) {
+  const clean = source.replace(/^---[\s\S]*?---\s*/, '');
+  const lines = clean.split('\n');
+  const blocks: React.ReactNode[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+    if (line.startsWith('```')) {
+      const code: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith('```')) { code.push(lines[index]); index += 1; }
+      blocks.push(<pre key={`code-${index}`}><code>{code.join('\n')}</code></pre>);
+    } else if (line.startsWith('# ')) blocks.push(<h1 key={index}>{line.slice(2)}</h1>);
+    else if (line.startsWith('## ')) blocks.push(<h2 key={index}>{line.slice(3)}</h2>);
+    else if (line.startsWith('### ')) blocks.push(<h3 key={index}>{line.slice(4)}</h3>);
+    else if (/^[-*] /.test(line)) blocks.push(<p className="md-list" key={index}><span>—</span><span><InlineMarkdown text={line.slice(2)} /></span></p>);
+    else if (/^\d+\. /.test(line)) blocks.push(<p className="md-list" key={index}><span>{line.match(/^\d+/)?.[0]}.</span><span><InlineMarkdown text={line.replace(/^\d+\. /, '')} /></span></p>);
+    else blocks.push(<p key={index}><InlineMarkdown text={line} /></p>);
+  }
+  return <article className="markdown-body">{blocks}</article>;
+}
+
+function DocsButton({ onClick }: { onClick: () => void }) {
+  return <button className="docs-button" onClick={onClick} aria-label="打开使用文档" title="使用文档">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.8h9.4L19 7.4v12.8H6z"/><path d="M15 3.8v4h4M9 12h7M9 15.5h7"/></svg>
+  </button>;
+}
+
+function DocsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [selected, setSelected] = useState(docs[0]);
+  const [source, setSource] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    fetch(selected.file, { cache: 'no-store' }).then(response => response.text()).then(setSource).catch(() => setSource('# 文档读取失败'));
+  }, [open, selected]);
+  if (!open) return null;
+  return <div className="docs-overlay" role="dialog" aria-modal="true" aria-label="使用文档">
+    <button className="docs-dismiss" onClick={onClose} aria-label="关闭文档">×</button>
+    <section className="docs-glass">
+      <nav>{docs.map(doc => <button key={doc.id} className={selected.id === doc.id ? 'active' : ''} onClick={() => setSelected(doc)}>{doc.title}</button>)}</nav>
+      <div className="docs-content"><MarkdownView source={source} /></div>
+    </section>
+  </div>;
 }
 
 export default function Home() {
   const [library, setLibrary] = useState<Snapshot | null>(null);
   const [loadError, setLoadError] = useState('');
-  const [view, setView] = useState<ShelfView>('shelf');
-  const [bookTab, setBookTab] = useState<BookTab>('chapters');
+  const [view, setView] = useState<View>('shelf');
+  const [bookMode, setBookMode] = useState<BookMode>('chapter');
   const [worldTab, setWorldTab] = useState<WorldTab>('character');
-  const [selectedBeat, setSelectedBeat] = useState(0);
-  const [selectedLore, setSelectedLore] = useState(0);
-  const [previewTab, setPreviewTab] = useState<PreviewTab>('film');
-  const [detailMode, setDetailMode] = useState(false);
+  const [entityId, setEntityId] = useState('');
+  const [assetIndex, setAssetIndex] = useState(0);
+  const [shotIndex, setShotIndex] = useState(0);
+  const [previewTab, setPreviewTab] = useState<PreviewTab>('video');
+  const [filmScope, setFilmScope] = useState<FilmScope>('shot');
+  const [docsOpen, setDocsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -58,143 +124,108 @@ export default function Home() {
     for (const item of library?.items ?? []) latest.set(item.id.slice(0, -4), item);
     return [...latest.values()];
   }, [library]);
+  const links = library?.links ?? [];
   const book = items.find(item => item.type === 'book');
   const chapter = items.find(item => item.type === 'chapter' && item.parent === book?.id);
   const shots = items.filter(item => item.type === 'shot' && item.parent === chapter?.id);
-  const assets = items.filter(item => item.type === 'asset' && item.parent === book?.id);
+  const shot = shots[Math.min(shotIndex, Math.max(shots.length - 1, 0))];
   const cover = items.find(item => item.id === book?.data.cover);
-  const beat = shots[Math.min(selectedBeat, Math.max(shots.length - 1, 0))];
-  const refs = beat ? (library?.links ?? [])
-    .filter(link => link.source === beat.id && ['depends', 'relates'].includes(link.kind))
-    .map(link => items.find(item => item.id === link.target))
-    .filter((item): item is Item => Boolean(item)) : [];
-  const clips = items.filter(item => item.type === 'clip' && item.parent === beat?.id);
-  const clip = clips.at(-1);
   const chapterFilm = items.filter(item => item.type === 'film' && item.parent === chapter?.id).at(-1);
-  const visualRefs = refs.filter(item => item.type === 'asset');
-  const fallbackFrame = visualRefs.at(-1) ?? assets.find(item => item.data.slug === 'temple-inspector-keyframe') ?? cover;
-  const loreItems = items.filter(item => item.type === worldTab && item.parent === book?.id);
-  const lore = loreItems[Math.min(selectedLore, Math.max(loreItems.length - 1, 0))];
-  const totalDuration = shots.reduce((sum, shot) => sum + Number(shot.data.duration || 0), 0);
+  const clip = items.filter(item => item.type === 'clip' && item.parent === shot?.id).at(-1);
+  const shotRefs = shot ? links.filter(link => link.source === shot.id && ['depends', 'relates'].includes(link.kind)).map(link => items.find(item => item.id === link.target)).filter((item): item is Item => Boolean(item)) : [];
+  const shotVisuals = shotRefs.filter(item => item.type === 'asset');
+  const worldItems = items.filter(item => {
+    if (item.parent !== book?.id) return false;
+    if (worldTab === 'prop') return ['system', 'relic'].includes(item.type);
+    return item.type === worldTab;
+  });
+  const entity = worldItems.find(item => item.id === entityId) ?? worldItems[0];
+  const entityAssets = entity ? links.filter(link => link.source === entity.id && link.kind === 'depends').map(link => items.find(item => item.id === link.target)).filter((item): item is Item => item?.type === 'asset') : [];
+  const entityAsset = entityAssets[Math.min(assetIndex, Math.max(entityAssets.length - 1, 0))];
+  const ambient = chapterFilm ?? clip;
 
   async function copyHarnessTask() {
-    if (!beat) return;
-    const prompt = `请在 BookMontage 中处理 ${beat.data.path || beat.id}（ID: ${beat.id}）。读取项目 Skill 和关联资产，保留人类草稿意图，完善 story 与 body；写回 SQLite 后运行 bookmontage export 和 bookmontage verify，等待人类审核。`;
+    if (!shot) return;
+    const prompt = `请在 BookMontage 中处理 ${shot.data.path || shot.id}（ID: ${shot.id}）。读取项目 Skill 和关联资产，保留人类草稿意图，完善 story 与 body；写回 SQLite 后运行 bookmontage export 和 bookmontage verify，等待人类审核。`;
     await navigator.clipboard.writeText(prompt);
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    window.setTimeout(() => setCopied(false), 1600);
   }
 
-  if (!library || !book) {
-    return <main className="loading-shell"><span className="brand-seal">卷</span><p>{loadError ? `藏书读取失败：${loadError}` : '正在展开藏书……'}</p></main>;
-  }
+  if (!library || !book) return <main className="loading"><span>书间</span><p>{loadError || '正在读取藏书'}</p></main>;
 
-  if (view === 'shelf') {
-    return (
-      <main className="library-shell">
-        <div className="sun-haze" />
-        <div className="floating-motes" aria-hidden="true">{Array.from({ length: 12 }).map((_, index) => <i key={index} />)}</div>
-        <header className="library-header">
-          <div className="brand-lockup"><span className="brand-seal">卷</span><div><p>BOOKMONTAGE</p><h1>书间</h1></div></div>
-          <div className="quiet-status"><span /> Harness 可读 · SQLite 本地藏书</div>
-        </header>
-        <section className="shelf-stage" aria-labelledby="shelf-title">
-          <div className="shelf-copy">
-            <p className="eyebrow">一方世界，始于一卷</p>
-            <h2 id="shelf-title">今日，翻开哪一个故事？</h2>
-            <p>这里没有表格和新建按钮。你负责想象与裁定，Harness 替你整理、续写与执行。</p>
-          </div>
-          <div className="wooden-alcove">
-            <div className="alcove-arch"><span>❦</span></div>
-            <button className="hero-book" onClick={() => setView('book')} aria-label={`打开《${book.data.title}》`}>
-              <span className="book-spine" /><span className="cover-art" style={{ backgroundImage: `url('${mediaUrl(cover)}')` }} /><span className="cover-vignette" />
-              <span className="cover-frame"><small>第一卷</small><strong>{book.data.title}</strong><em>{book.data.subtitle}</em><b>❦</b></span>
-            </button>
-            <p className="open-hint"><span>↟</span> 轻触封面，入卷</p><div className="shelf-plank"><span /><span /><span /></div>
-          </div>
-          <div className="library-footnote"><span>藏书一卷</span><i /><span>{shots.length} 段镜头 · {totalDuration} 秒</span><i /><span>{assets.length} 项视觉资产已锚定</span></div>
-        </section>
-      </main>
-    );
-  }
+  if (view === 'shelf') return <main className="home-stage">
+    {ambient && <video className="ambient-video" src={mediaUrl(ambient)} poster={mediaUrl(cover)} autoPlay muted loop playsInline />}
+    <div className="home-wash" />
+    <header className="home-header">
+      <div className="wordmark"><span>BOOKMONTAGE</span><i>#</i><strong>书间</strong></div>
+      <DocsButton onClick={() => setDocsOpen(true)} />
+    </header>
+    <section className="bookshelf" aria-label="书架">
+      <div className="shelf-lines" aria-hidden="true"><i/><i/><i/></div>
+      <button className="book-card" onClick={() => setView('book')} aria-label={`打开《${book.data.title}》`}>
+        <img src={mediaUrl(cover)} alt="" />
+        <span className="book-card-glass"><strong>{book.data.title}</strong><em>{book.data.subtitle}</em></span>
+      </button>
+    </section>
+    <DocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
+  </main>;
 
-  return (
-    <main className="reading-room">
-      <header className="book-toolbar">
-        <button className="return-shelf" onClick={() => setView('shelf')}>← 回到书架</button>
-        <div className="book-identity"><span>卷一</span><strong>{book.data.title}</strong><small>{book.data.status === 'draft' ? '创作中' : String(book.data.status || '')}</small></div>
-        <div className="harness-location"><span>只读视图</span><code>{String(beat?.data.path || chapter?.data.path || '')}</code></div>
-      </header>
-      <nav className="ribbon-tabs" aria-label="书籍视图">
-        <button className={bookTab === 'world' ? 'active' : ''} onClick={() => { setBookTab('world'); setDetailMode(false); }}>全局设定</button>
-        <button className={bookTab === 'chapters' ? 'active' : ''} onClick={() => setBookTab('chapters')}>{chapter?.data.title}</button>
+  return <main className="workspace">
+    {ambient && <video className="ambient-video workspace-video" src={mediaUrl(ambient)} poster={mediaUrl(cover)} autoPlay muted loop playsInline />}
+    <div className="workspace-wash" />
+    <header className="workspace-header">
+      <button className="back-button" onClick={() => setView('shelf')} aria-label="返回书架">← <span>书架</span></button>
+      <nav className="mode-switch" aria-label="书籍视图">
+        <button className={bookMode === 'world' ? 'active' : ''} onClick={() => setBookMode('world')}>全局</button>
+        <button className={bookMode === 'chapter' ? 'active' : ''} onClick={() => setBookMode('chapter')}>章节</button>
       </nav>
+      <DocsButton onClick={() => setDocsOpen(true)} />
+    </header>
 
-      <section className="open-book" aria-label={`打开的${book.data.title}`}>
-        <span className="book-clasp left" aria-hidden="true" /><span className="book-clasp right" aria-hidden="true" />
-        <div className="page page-left">
-          <span className="ornament-corner tl">❦</span><span className="ornament-corner bl">❦</span>
-          {bookTab === 'chapters' && !detailMode && <>
-            <div className="page-heading"><div><p>CHAPTER ONE</p><h2>{chapter?.data.title}</h2></div><div className="chapter-actions"><span className="chapter-duration">{totalDuration} 秒 · {shots.length} 镜</span>{chapterFilm && <a href={mediaUrl(chapterFilm)} target="_blank">▶ 连续预演</a>}</div></div>
-            <p className="chapter-lede">{chapter?.data.summary}</p>
-            <div className="story-stream">{shots.map((shot, index) => (
-              <button key={shot.id} className={`story-beat ${beat?.id === shot.id ? 'selected' : ''}`} onClick={() => { setSelectedBeat(index); setPreviewTab('film'); }}>
-                <span className="beat-number">{String(index + 1).padStart(2, '0')}</span>
-                <span className="beat-copy"><small>{String(index * Number(shot.data.duration || 10)).padStart(2, '0')}—{String((index + 1) * Number(shot.data.duration || 10)).padStart(2, '0')} 秒 · {shot.data.title}</small>{shot.data.story}</span>
-                <span className="hover-assets">{(library.links ?? []).filter(link => link.source === shot.id).slice(0, 3).map(link => <i key={`${link.source}-${link.target}`}>{items.find(item => item.id === link.target)?.data.title}</i>)}</span>
-              </button>
-            ))}</div>
-          </>}
-
-          {bookTab === 'chapters' && detailMode && beat && <>
-            <div className="page-heading detail-heading"><div><p>SHOT {String(selectedBeat + 1).padStart(3, '0')}</p><h2>Head & Body</h2></div><button className="text-button" onClick={() => setDetailMode(false)}>← 回叙事</button></div>
-            <section className="spec-block"><header><span>HEAD · 引用</span><small>唯一事实源</small></header><div className="asset-reference-list">{refs.map((ref, index) => <span key={ref.id}><b>@{index + 1}</b><strong>{ref.data.title}</strong><i>{ref.type} · {shortVersion(ref.id)}</i></span>)}</div></section>
-            <section className="spec-block body-block"><header><span>BODY · 模型提示</span><small>{beat.data.model}</small></header><p>{beat.data.body}</p></section>
-            <button className="copy-harness" onClick={copyHarnessTask}><span>{copied ? '✓' : '⧉'}</span>{copied ? '已复制给 Harness' : '复制 Harness 任务'}</button>
-          </>}
-
-          {bookTab === 'world' && <>
-            <div className="page-heading"><div><p>WORLD BIBLE</p><h2>全局设定</h2></div><span className="version-pill">单一事实源</span></div>
-            <p className="chapter-lede">角色、地点和规则只在这里定义一次。镜头只保存引用；上游换版后，下游会亮起警告。</p>
-            <div className="world-index">{worldTabs.map(tab => (
-              <button key={tab.id} className={worldTab === tab.id ? 'active' : ''} onClick={() => { setWorldTab(tab.id); setSelectedLore(0); }}><span>{tab.sigil}</span><strong>{tab.label}</strong><small>{items.filter(item => item.type === tab.id).length} 项</small></button>
-            ))}</div>
-            <p className="world-note">“世界观不是提示词的附件；它是每个镜头共同引用的一本账。”</p>
-          </>}
-          <span className="page-number">— 12 —</span>
+    <section className="glass-book">
+      {bookMode === 'world' && <>
+        <nav className="side-bookmarks" aria-label="全局资产类别">{worldTabs.map(tab => <button key={tab.id} className={worldTab === tab.id ? 'active' : ''} onClick={() => { setWorldTab(tab.id); setEntityId(''); setAssetIndex(0); }}>{tab.title}</button>)}</nav>
+        <div className="glass-page entity-page">
+          <div className="entity-list">{worldItems.map(item => <button key={item.id} className={entity?.id === item.id ? 'active' : ''} onClick={() => { setEntityId(item.id); setAssetIndex(0); }}><strong>{item.data.title}</strong>{item.data.role && <span>{item.data.role}</span>}</button>)}</div>
         </div>
-
-        <div className="book-gutter"><span /></div>
-
-        <div className="page page-right">
-          <span className="ornament-corner tr">❦</span><span className="ornament-corner br">❦</span>
-          {bookTab === 'chapters' && beat && <>
-            <div className="preview-heading"><div><p>{beat.data.slug}</p><h2>{beat.data.title}</h2></div><button className="detail-toggle" onClick={() => setDetailMode(!detailMode)}>{detailMode ? '收起技术页' : '查看 Head & Body'}</button></div>
-            <nav className="preview-tabs" aria-label="镜头预览">
-              <button className={previewTab === 'film' ? 'active' : ''} onClick={() => setPreviewTab('film')}>成片</button>
-              <button className={previewTab === 'assets' ? 'active' : ''} onClick={() => setPreviewTab('assets')}>引用资产</button>
-              <button className={previewTab === 'spec' ? 'active' : ''} onClick={() => setPreviewTab('spec')}>生成约束</button>
-            </nav>
-            {previewTab === 'film' && <div className="film-preview">
-              {clip ? <video controls src={mediaUrl(clip)} poster={mediaUrl(fallbackFrame)} /> : <div className="empty-film" style={{ backgroundImage: `url('${mediaUrl(fallbackFrame)}')` }}><span>候选成片尚未生成</span><small>关键画面 · {fallbackFrame?.data.title}</small></div>}
-              <div className="film-caption"><span>{beat.data.model} · {beat.data.duration}s</span><b>{clip ? `${clip.data.status} · ${shortVersion(clip.id)}` : 'READY FOR GENERATION'}</b></div>
-              <div className="selected-assets-strip"><p>当前镜头的事实引用</p><div>{refs.map(ref => <span key={ref.id}>{ref.data.title} · {shortVersion(ref.id)}</span>)}</div></div>
-            </div>}
-            {previewTab === 'assets' && <div className="asset-grid">{(visualRefs.length ? visualRefs : assets).slice(0, 3).map(asset => <article key={asset.id}><img src={mediaUrl(asset)} alt={String(asset.data.title)} /><div><small>{asset.data.scope === 'global' ? 'GLOBAL ASSET' : asset.type.toUpperCase()}</small><strong>{asset.data.title}</strong></div><span>{shortVersion(asset.id)}</span></article>)}</div>}
-            {previewTab === 'spec' && <div className="constraint-sheet"><p>镜头生成约束</p><ul><li><span>时长</span>{beat.data.duration} 秒，16:9</li><li><span>模型</span>{beat.data.model}</li><li><span>状态</span>{beat.data.status}，生成后仍须人类验收</li><li><span>草稿</span>{beat.data.draft}</li><li><span>对白</span>写进动作发生的时间段，不依赖后期猜配</li></ul></div>}
+        <div className="book-seam" />
+        <div className="glass-page asset-page">
+          {entity && <>
+            <h1>{entity.data.title}</h1>
+            {entityAssets.length > 0 ? <>
+              <div className="asset-switcher">{entityAssets.map((asset, index) => <button key={asset.id} className={assetIndex === index ? 'active' : ''} onClick={() => setAssetIndex(index)}>{asset.data.title}</button>)}</div>
+              <figure className="entity-visual"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /><figcaption>{entityAsset?.data.title}</figcaption></figure>
+            </> : <div className="text-asset"><p>{entity.data.design}</p></div>}
           </>}
-
-          {bookTab === 'world' && <>
-            <div className="preview-heading"><div><p>{worldTabs.find(tab => tab.id === worldTab)?.label.toUpperCase()}</p><h2>{lore?.data.title || '尚未落笔'}</h2></div>{lore && <span className="version-pill">{shortVersion(lore.id)}</span>}</div>
-            {worldTab === 'character' ? <>
-              <div className="world-asset-hero" style={{ backgroundImage: `url('${mediaUrl(assets.find(item => item.data.slug === 'four-demons-character-bible'))}')` }}><span>角色总览 · 全局引用</span></div>
-              <div className="character-list">{loreItems.map((item, index) => <button key={item.id} className={lore?.id === item.id ? 'active' : ''} onClick={() => setSelectedLore(index)}><strong>{item.data.title}</strong><small>{item.data.role} · {shortVersion(item.id)}</small></button>)}</div>
-            </> : null}
-            {lore && <article className="lore-card compact"><span>{worldTabs.find(tab => tab.id === worldTab)?.sigil}</span><small>{lore.type.toUpperCase()}</small><h2>{lore.data.title}</h2><p>{lore.data.design}</p>{lore.data.voice && <i>音色：{lore.data.voice}</i>}</article>}
-          </>}
-          <span className="page-number">— 13 —</span>
         </div>
-      </section>
-    </main>
-  );
+      </>}
+
+      {bookMode === 'chapter' && <>
+        <div className="glass-page narrative-page">
+          <div className="story-list">{shots.map((item, index) => <button key={item.id} className={shot?.id === item.id ? 'active' : ''} onClick={() => { setShotIndex(index); setPreviewTab('video'); setFilmScope('shot'); }}>
+            <h2>{item.data.title}</h2><p>{item.data.story}</p>
+            {dialogueOf(item).map((line, quoteIndex) => <blockquote key={quoteIndex}>“{line}”</blockquote>)}
+          </button>)}</div>
+        </div>
+        <div className="book-seam" />
+        <div className="glass-page preview-page">
+          <nav className="preview-switcher" aria-label="镜头详情">
+            <button className={previewTab === 'video' ? 'active' : ''} onClick={() => setPreviewTab('video')}>视频</button>
+            <button className={previewTab === 'assets' ? 'active' : ''} onClick={() => setPreviewTab('assets')}>引用资产</button>
+            <button className={previewTab === 'tech' ? 'active' : ''} onClick={() => setPreviewTab('tech')}>技术细节</button>
+            <button className={previewTab === 'prompt' ? 'active' : ''} onClick={() => setPreviewTab('prompt')}>Head & Body</button>
+          </nav>
+          {previewTab === 'video' && <div className="video-view">
+            <video controls src={mediaUrl(filmScope === 'chapter' ? chapterFilm : clip)} poster={mediaUrl(shotVisuals.at(-1) ?? cover)} />
+            <div className="video-scope"><button className={filmScope === 'shot' ? 'active' : ''} onClick={() => setFilmScope('shot')}>本镜</button><button className={filmScope === 'chapter' ? 'active' : ''} onClick={() => setFilmScope('chapter')}>连续预演</button></div>
+          </div>}
+          {previewTab === 'assets' && <div className="reference-grid">{shotRefs.map(ref => <article key={ref.id}>{ref.type === 'asset' && <img src={mediaUrl(ref)} alt="" />}<strong>{ref.data.title}</strong><span>{ref.type}</span></article>)}</div>}
+          {previewTab === 'tech' && shot && <div className="tech-sheet"><dl><div><dt>模型</dt><dd>{shot.data.model}</dd></div><div><dt>时长</dt><dd>{shot.data.duration} 秒</dd></div><div><dt>状态</dt><dd>{shot.data.status}</dd></div><div className="wide"><dt>人类草稿</dt><dd>{shot.data.draft}</dd></div></dl></div>}
+          {previewTab === 'prompt' && shot && <div className="prompt-sheet"><section><h3>HEAD</h3>{shotRefs.map((ref, index) => <p key={ref.id}>@{index + 1}　{ref.data.title}</p>)}</section><section><h3>BODY</h3><p>{shot.data.body}</p></section><button onClick={copyHarnessTask}>{copied ? '已复制' : '复制给 Harness'}</button></div>}
+        </div>
+      </>}
+    </section>
+    <DocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
+  </main>;
 }

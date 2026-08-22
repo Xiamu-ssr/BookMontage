@@ -1,11 +1,11 @@
 # Seedance 2.5
 
-Official source: [ByteDance Seed launch note](https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5).
+官方资料：[ByteDance Seed 发布说明](https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5)
 
-- One generation can be up to 30 seconds and may contain multiple connected shots; use timestamped blocks such as `0–5s`, `6–12s`.
-- References are roles, not attachments: state what each image/video/audio controls (character, scene, movement, voice, composition). It accepts up to 30 images, 10 videos, and 10 audio clips on ByteDance's product surface.
-- For hard action, specify starting geography, path, scale, contact, consequence, and camera response. Allocate time to transitions; do not encode five transformations in one second.
-- Use a clay/blocking reference when spatial paths matter. Use image references for identity and style. A 30-second direct generation does not require three arbitrary keyframes.
-- Put dialogue and sound in the same timestamp block as the visible action. Preserve exact spoken text and assign speaker/voice.
-- Prefer concrete motion and lens direction over adjectives. Request no subtitles or incidental text when unwanted.
-- Check the current gateway schema before submitting: ByteDance capability does not prove a third-party endpoint exposes every reference or editing field.
+- 单次最长 30 秒，可以包含多个连续镜头；使用 `0–5s`、`6–12s` 这样的时间段组织提示词。
+- 参考素材不是普通附件。逐一说明每张图、视频和音频负责控制角色、场景、动作、音色还是构图。字节产品端最多支持 30 张图片、10 段视频和 10 段音频。
+- 高难动作要写清起始方位、运动路径、尺度、接触点、后果与镜头反应。给变形和转场留出时间，不要把五次变化塞进一秒。
+- 空间路径复杂时可用泥模或走位图；角色图负责身份与风格。30 秒直出不要求机械地提供三张关键帧。
+- 台词和声音要写在对应动作的同一时间段，保留原句并明确说话者与音色。
+- 用具体动作和镜头方向代替“震撼、唯美”等形容词；不需要文字时明确禁止字幕与偶发文字。
+- 提交前检查当前网关的接口结构。字节原生能力不代表第三方端点暴露了所有参考与编辑字段。
