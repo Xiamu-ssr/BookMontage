@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
-import { dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, verifyStore } from '../lib/store.js';
+import { dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, tmpRoot, verifyStore } from '../lib/store.js';
 
 const [command = 'help', ...args] = process.argv.slice(2);
 
@@ -26,11 +26,45 @@ function help() {
   bookmontage links <id|slug|path>
   bookmontage relate <source> <kind> <target>
   bookmontage unlink <source> <kind> <target>
+  bookmontage stash <url> --title <name> [--source <page>] [--book <selector>]
   bookmontage verify
   bookmontage doctor
   bookmontage generate <shot-id> [--model sapiens-ai/agnes-video-v2.0] [--duration 10] [--resolution 720p]
   bookmontage compose <chapter-id>
 `);
+}
+
+const mimeExtensions = {
+  'image/jpeg':'.jpg', 'image/png':'.png', 'image/webp':'.webp', 'image/gif':'.gif',
+  'video/mp4':'.mp4', 'video/webm':'.webm', 'application/pdf':'.pdf',
+  'text/plain':'.txt', 'text/markdown':'.md', 'application/json':'.json',
+};
+
+async function stashRemote(url) {
+  const response = await fetch(url, { headers:{ 'User-Agent':'BookMontage/0.1 (+local research library)' }, redirect:'follow' });
+  if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
+  const mime = String(response.headers.get('content-type') || 'application/octet-stream').split(';')[0].toLowerCase();
+  const urlExtension = extname(new URL(response.url).pathname).toLowerCase();
+  const extension = mimeExtensions[mime] || (/^\.[a-z0-9]{1,6}$/.test(urlExtension) ? urlExtension : '.bin');
+  const mediaType = mime === 'image/gif' ? 'gif' : mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : 'document';
+  const id = makeId();
+  const filename = `${id}${extension}`;
+  writeFileSync(join(tmpRoot, filename), Buffer.from(await response.arrayBuffer()));
+  const db = openStore();
+  const bookSelector = flag('book');
+  const book = bookSelector ? findItem(db, bookSelector) : (() => {
+    const row = db.prepare("SELECT id,type,parent,data FROM item WHERE type='book' ORDER BY rowid LIMIT 1").get();
+    return row ? { ...row, data:JSON.parse(row.data) } : null;
+  })();
+  if (!book) { db.close(); throw new Error('No book exists for this temporary asset'); }
+  const title = flag('title', decodeURIComponent(new URL(response.url).pathname.split('/').pop() || '网络素材'));
+  putItem(db, { id, type:'temp_asset', parent:book.id, data:{
+    title, slug:flag('slug'), file:`tmp/${filename}`, mime, media_type:mediaType,
+    source_url:url, source_page:flag('source'), note:flag('note'),
+  } });
+  db.close();
+  exportSnapshot();
+  return id;
 }
 
 function relationCommand(mode, sourceSelector, kind, targetSelector) {
@@ -207,6 +241,7 @@ try {
   else if (command === 'links') console.log(listItemLinks(args[0]));
   else if (command === 'relate') console.log(relationCommand('add',args[0],args[1],args[2]));
   else if (command === 'unlink') console.log(relationCommand('remove',args[0],args[1],args[2]));
+  else if (command === 'stash') console.log(await stashRemote(args[0]));
   else if (command === 'verify') { const result=verifyStore(); console.log(JSON.stringify(result,null,2)); if(result.errors.length) process.exitCode=1; }
   else if (command === 'doctor') {
     const checks = [['ffmpeg','-version'],['ffprobe','-version'],['git','--version']].map(([tool,versionFlag]) => { try { execFileSync(tool,[versionFlag],{stdio:'ignore'}); return [tool,'ok']; } catch { return [tool,'missing']; } });

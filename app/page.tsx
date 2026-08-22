@@ -7,13 +7,14 @@ type ItemData = Record<string, unknown> & {
   title?: string; slug?: string; path?: string; subtitle?: string; summary?: string;
   story?: string; draft?: string; body?: string; file?: string; design?: string;
   voice?: string; role?: string; duration?: number; model?: string; status?: string; cover?: string;
+  mime?: string; media_type?: string; source_url?: string; source_page?: string; note?: string;
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
 type Snapshot = { format: number; items: Item[]; links: Link[] };
 type View = 'shelf' | 'book';
 type BookMode = 'world' | 'chapter';
-type WorldTab = 'character' | 'location' | 'faction' | 'prop' | 'relation';
+type WorldTab = 'character' | 'location' | 'faction' | 'prop' | 'relation' | 'temp';
 type ChapterView = 'overview' | 'detail';
 type PreviewTab = 'video' | 'assets' | 'tech' | 'prompt';
 type FilmScope = 'shot' | 'sequence';
@@ -35,6 +36,7 @@ const worldTabs: { id: WorldTab; title: string }[] = [
   { id: 'faction', title: '阵营' },
   { id: 'prop', title: '道具' },
   { id: 'relation', title: '关系' },
+  { id: 'temp', title: '临时素材' },
 ];
 
 const relationLabels: Record<string, string> = {
@@ -46,11 +48,32 @@ const relationLabels: Record<string, string> = {
 };
 
 const typeLabels: Record<string, string> = {
-  character: '角色', faction: '阵营', relic: '道具', system: '体系', location: '地图',
+  character: '角色', faction: '阵营', relic: '道具', system: '体系', location: '地图', temp_asset:'临时',
 };
 
 function mediaUrl(item?: Item) {
-  return item?.data.file ? `/book-assets/${String(item.data.file).split('/').pop()}` : '';
+  if (!item?.data.file) return '';
+  const folder = item.type === 'temp_asset' ? 'book-temp' : 'book-assets';
+  return `/${folder}/${String(item.data.file).split('/').pop()}`;
+}
+
+function MediaThumb({ item }: { item?: Item }) {
+  if (!item) return <span className="file-thumb">∅</span>;
+  if (item.type !== 'temp_asset' || ['image','gif'].includes(String(item.data.media_type))) return <img src={mediaUrl(item)} alt="" />;
+  if (item.data.media_type === 'video') return <video src={mediaUrl(item)} muted playsInline preload="metadata" />;
+  return <span className="file-thumb">{String(item.data.file || '').split('.').pop()?.toUpperCase() || 'FILE'}</span>;
+}
+
+function TempPreview({ item }: { item: Item }) {
+  const kind = String(item.data.media_type || 'document');
+  return <div className="temp-preview">
+    <div className="temp-stage">
+      {['image','gif'].includes(kind) && <img src={mediaUrl(item)} alt={String(item.data.title || '')} />}
+      {kind === 'video' && <video src={mediaUrl(item)} controls playsInline />}
+      {kind === 'document' && <a className="document-preview" href={mediaUrl(item)} target="_blank" rel="noreferrer"><b>{String(item.data.file || '').split('.').pop()?.toUpperCase()}</b><span>打开文档</span></a>}
+    </div>
+    <footer><span>{item.data.mime || kind}</span>{item.data.note && <p>{item.data.note}</p>}{item.data.source_page && <a href={String(item.data.source_page)} target="_blank" rel="noreferrer">查看来源 ↗</a>}</footer>
+  </div>;
 }
 
 function dialogueOf(item?: Item) {
@@ -125,7 +148,7 @@ export default function Home() {
   const [library, setLibrary] = useState<Snapshot | null>(null);
   const [loadError, setLoadError] = useState('');
   const [view, setView] = useState<View>('shelf');
-  const [bookMode, setBookMode] = useState<BookMode>('chapter');
+  const [bookMode, setBookMode] = useState<BookMode>('world');
   const [worldTab, setWorldTab] = useState<WorldTab>('character');
   const [entityId, setEntityId] = useState('');
   const [assetIndex, setAssetIndex] = useState(0);
@@ -181,12 +204,13 @@ export default function Home() {
   const shotVisuals = shotRefs.filter(item => item.type === 'asset');
   const worldItems = items.filter(item => {
     if (item.parent !== book?.id) return false;
+    if (worldTab === 'temp') return item.type === 'temp_asset';
     if (worldTab === 'prop') return ['system', 'relic'].includes(item.type);
     return item.type === worldTab;
   });
   const entity = worldItems.find(item => item.id === entityId) ?? worldItems[0];
   const assetsFor = (target?: Item) => target ? links.filter(link => link.source === target.id && link.kind === 'depends').map(link => itemByLogicalId(link.target)).filter((item): item is Item => item?.type === 'asset') : [];
-  const thumbnailFor = (target?: Item) => assetsFor(target)[0] ?? cover;
+  const thumbnailFor = (target?: Item) => target?.type === 'temp_asset' ? target : assetsFor(target)[0] ?? cover;
   const entityAssets = assetsFor(entity);
   const entityAsset = entityAssets[Math.min(assetIndex, Math.max(entityAssets.length - 1, 0))];
   const relationEdges = links.filter(link => relationLabels[link.kind]).map(link => ({ ...link, sourceItem: itemByLogicalId(link.source), targetItem: itemByLogicalId(link.target) })).filter((link): link is Link & { sourceItem: Item; targetItem: Item } => Boolean(link.sourceItem && link.targetItem));
@@ -256,13 +280,13 @@ export default function Home() {
         {worldTab !== 'relation' ? <>
           <div className="glass-page entity-page">
             <div className="entity-list">{worldItems.map(item => <button key={item.id} className={entity?.id === item.id ? 'active' : ''} onClick={() => { setEntityId(item.id); setAssetIndex(0); }}>
-              <img src={mediaUrl(thumbnailFor(item))} alt="" />
+              <MediaThumb item={thumbnailFor(item)} />
               <span><strong>{item.data.title}</strong><small>{item.data.role || typeLabels[item.type]}</small></span>
             </button>)}</div>
           </div>
           <div className="book-seam" />
           <div className="glass-page asset-page">
-            {entity && <>
+            {entity && entity.type === 'temp_asset' ? <><h1>{entity.data.title}</h1><TempPreview item={entity} /></> : entity && <>
               <h1>{entity.data.title}</h1>
               {entityAssets.length > 0 ? <>
                 <div className="asset-switcher">{entityAssets.map((asset, index) => <button key={asset.id} className={assetIndex === index ? 'active' : ''} onClick={() => setAssetIndex(index)}>{asset.data.title}</button>)}</div>
@@ -298,7 +322,7 @@ export default function Home() {
       {bookMode === 'chapter' && <>
         <nav className="side-bookmarks chapter-bookmarks" aria-label="章节层级">
           <button className={chapterView === 'overview' ? 'active' : ''} onClick={() => setChapterView('overview')}>章节总览</button>
-          <button className={chapterView === 'detail' ? 'active' : ''} onClick={() => setChapterView('detail')}>{chapterShortTitle(chapter)}</button>
+          {chapter && <button className={chapterView === 'detail' ? 'active' : ''} onClick={() => setChapterView('detail')}>{chapterShortTitle(chapter)}</button>}
         </nav>
         {chapterView === 'overview' ? <>
           <div className="glass-page chapter-index-page">

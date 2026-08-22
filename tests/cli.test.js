@@ -61,3 +61,16 @@ test('world relations share the link graph and remain independently editable', (
   run(home, 'unlink', 'hero', 'member_of', 'guild');
   assert.doesNotMatch(run(home, 'links', 'hero'), /member_of/);
 });
+
+test('stash keeps downloaded research in the disposable tmp library', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bookmontage-stash-'));
+  const bundleFile = join(home, 'bundle.json');
+  writeFileSync(bundleFile, JSON.stringify({ items:[{ id:'111111111111111111111111111111110001', type:'book', data:{ title:'Test' } }], links:[] }));
+  run(home, 'import', bundleFile);
+  const id = run(home, 'stash', 'data:text/plain,source-note', '--title', 'Source note').trim();
+  const item = JSON.parse(run(home, 'show', id));
+  assert.equal(item.type, 'temp_asset');
+  assert.equal(item.data.media_type, 'document');
+  assert.equal(readFileSync(join(home, item.data.file), 'utf8'), 'source-note');
+  assert.deepEqual(JSON.parse(run(home, 'verify')).errors, []);
+});
