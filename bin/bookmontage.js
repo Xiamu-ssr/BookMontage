@@ -23,11 +23,40 @@ function help() {
   bookmontage show <id|slug|path>
   bookmontage prompt <id|slug|path>
   bookmontage revise <id> <patch.json>
+  bookmontage links <id|slug|path>
+  bookmontage relate <source> <kind> <target>
+  bookmontage unlink <source> <kind> <target>
   bookmontage verify
   bookmontage doctor
   bookmontage generate <shot-id> [--model sapiens-ai/agnes-video-v2.0] [--duration 10] [--resolution 720p]
   bookmontage compose <chapter-id>
 `);
+}
+
+function relationCommand(mode, sourceSelector, kind, targetSelector) {
+  if (!/^[a-z][a-z0-9_]*$/.test(kind || '')) throw new Error(`Invalid relation kind: ${kind}`);
+  if (['depends','derived_from','relates'].includes(kind)) throw new Error(`${kind} is reserved for production links`);
+  const db = openStore();
+  const source = findItem(db, sourceSelector);
+  const target = findItem(db, targetSelector);
+  if (mode === 'add') putLink(db, { source:source.id, target:target.id, kind });
+  else db.prepare('DELETE FROM link WHERE source=? AND target=? AND kind=?').run(source.id, target.id, kind);
+  db.close();
+  exportSnapshot();
+  return `${source.data.title || source.id}\t${kind}\t${target.data.title || target.id}`;
+}
+
+function listItemLinks(selector) {
+  const db = openStore();
+  const item = findItem(db, selector);
+  const rows = db.prepare(`
+    SELECT 'out' direction,l.kind,i.id,i.data FROM link l JOIN item i ON i.id=l.target WHERE l.source=?
+    UNION ALL
+    SELECT 'in' direction,l.kind,i.id,i.data FROM link l JOIN item i ON i.id=l.source WHERE l.target=?
+    ORDER BY direction,kind
+  `).all(item.id, item.id);
+  db.close();
+  return rows.map(row => `${row.direction}\t${row.kind}\t${row.id}\t${JSON.parse(row.data).title || ''}`).join('\n');
 }
 
 function composeChapter(selector) {
@@ -175,6 +204,9 @@ try {
     const db = openStore(); const item = findItem(db,args[0]); db.close();
     console.log(`请在 BookMontage 中处理 ${item.data.path || item.id}（ID: ${item.id}）。读取项目 Skill 和关联资产，保留人类草稿意图，完成后写回 SQLite、运行 bookmontage export 与 bookmontage verify，并将结果留给人类审核。`);
   } else if (command === 'revise') console.log(reviseItem(args[0],args[1]));
+  else if (command === 'links') console.log(listItemLinks(args[0]));
+  else if (command === 'relate') console.log(relationCommand('add',args[0],args[1],args[2]));
+  else if (command === 'unlink') console.log(relationCommand('remove',args[0],args[1],args[2]));
   else if (command === 'verify') { const result=verifyStore(); console.log(JSON.stringify(result,null,2)); if(result.errors.length) process.exitCode=1; }
   else if (command === 'doctor') {
     const checks = [['ffmpeg','-version'],['ffprobe','-version'],['git','--version']].map(([tool,versionFlag]) => { try { execFileSync(tool,[versionFlag],{stdio:'ignore'}); return [tool,'ok']; } catch { return [tool,'missing']; } });

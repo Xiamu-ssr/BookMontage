@@ -1,6 +1,8 @@
 # MiniMax H3
 
-官方资料：[MiniMax H3 仓库](https://github.com/MiniMax-AI/MiniMax-H3)、[官方提示词 Skill](https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills/h3-prompt-writing)、[模型说明](https://www.minimax.io/blog/minimax-h3)
+官方资料：[MiniMax H3 仓库](https://github.com/MiniMax-AI/MiniMax-H3)、[官方提示词 Skill](https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills/h3-prompt-writing)、[模型说明](https://www.minimax.io/blog/minimax-h3)、[ZenMux 模型页](https://zenmux.ai/minimax/minimax-h3)
+
+本页直接提炼自 MiniMax 官方仓库随模型发布的提示词 Skill，不是通用视频提示词的二手拼接。
 
 - 时长为 4–15 秒；原生同步生成立体声音频，官方产品最高支持 2K。
 - 先选模式：T2VA（文本）、I2VA（首帧）、FL2VA（首尾帧）、L2VA（尾帧）或 Ref2VA（多模态参考）。
@@ -9,3 +11,4 @@
 - 结构使用英文，台词、歌词与画面文字保留原语言。
 - 明确构图、主体、环境、动作、镜头、声音和参考素材出现的准确时间。具体物理事件比“电影感、唯美”更有效。
 - 第三方网关可能只开放部分输入字段。使用首尾帧或完整参考能力前，先检查它的请求结构。
+- ZenMux 当前标价约 `$0.074–0.1185/秒`。同为 720p、无视频输入时，通常低于 Seedance 2.0；但最终比较必须以成功任务返回的实际账单为准。

@@ -13,4 +13,6 @@ SQLite 是唯一事实源。不要手改 `public/generated/library.json`，它�
 4. 完成后运行 `export` 和 `verify`。Warning 表示上游资产已有新版本，依赖镜头需要复核。
 5. 付费生成必须先经人确认。使用 `generate <shot-id>`，生成物先作为候选片等待审核。
 
-写模型提示词时，只读取当前模型的说明：[Seedance 2.5](references/seedance-2.5.md) 或 [MiniMax H3](references/minimax-h3.md)。
+世界关系也使用同一张 `link` 图。用 `links <对象>` 查看双向关系，`relate <源> <kind> <目标>` 新增有向关系，`unlink <源> <kind> <目标>` 删除；不要复制角色、阵营或道具数据。
+
+写模型提示词时，只读取当前模型对应的说明：[Seedance 2.5](references/seedance-2.5.md)、[Seedance 2.0](references/seedance-2.0.md)、[MiniMax H3](references/minimax-h3.md)、[PixVerse V6 / C1](references/pixverse-v6-c1.md)、[SkyReels V4](references/skyreels-v4.md)、[Agnes Video 2.0](references/agnes-video-2.md) 或 [Gemini Omni Flash](references/gemini-omni-flash.md)。没有第一方提示词手册的模型只能记录为模型卡，禁止把社区经验标成官方规则。

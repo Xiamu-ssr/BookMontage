@@ -42,3 +42,22 @@ test('revising an upstream item marks dependent work stale', () => {
   assert.equal(result.warnings.length, 1);
   assert.match(result.warnings[0], /stale dependency/);
 });
+
+test('world relations share the link graph and remain independently editable', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bookmontage-relations-'));
+  const bundleFile = join(home, 'bundle.json');
+  writeFileSync(bundleFile, JSON.stringify({
+    items: [
+      { id: '111111111111111111111111111111110001', type: 'book', data: { title: 'Test' } },
+      { id: '222222222222222222222222222222220001', type: 'character', parent: '111111111111111111111111111111110001', data: { title: 'Hero', slug: 'hero' } },
+      { id: '333333333333333333333333333333330001', type: 'faction', parent: '111111111111111111111111111111110001', data: { title: 'Guild', slug: 'guild' } },
+    ],
+    links: [],
+  }));
+  run(home, 'import', bundleFile);
+  run(home, 'relate', 'hero', 'member_of', 'guild');
+  assert.match(run(home, 'links', 'hero'), /out\tmember_of.*Guild/);
+  assert.deepEqual(JSON.parse(run(home, 'verify')).warnings, []);
+  run(home, 'unlink', 'hero', 'member_of', 'guild');
+  assert.doesNotMatch(run(home, 'links', 'hero'), /member_of/);
+});

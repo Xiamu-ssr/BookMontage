@@ -1,0 +1,1 @@
+../../skills/bookmontage/references/gemini-omni-flash.md

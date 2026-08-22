@@ -1,0 +1,1 @@
+../../skills/bookmontage/references/seedance-2.0.md
