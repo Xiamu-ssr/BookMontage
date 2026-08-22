@@ -13,6 +13,8 @@ SQLite 是唯一事实源。不要手改 `public/generated/library.json`，它�
 4. 完成后运行 `export` 和 `verify`。Warning 表示上游资产已有新版本，依赖镜头需要复核。
 5. 付费生成必须先经人确认。使用 `generate <shot-id>`，生成物先作为候选片等待审核。
 
+标记为 `copyright_sensitive: true` 的素材只能研究，禁止发送给生产模型。同一角色有多张已审核图片时优先使用 `primary: true` 的主图；CLI 会过滤版权敏感图，并把主图排在参考序列前面。
+
 世界关系也使用同一张 `link` 图。用 `links <对象>` 查看双向关系，`relate <源> <kind> <目标>` 新增有向关系，`unlink <源> <kind> <目标>` 删除；不要复制角色、阵营或道具数据。
 
 网络调研素材放进“临时素材”，不要伪装成正式角色资产。使用 `stash <url> --title <名称> --source <来源页面>` 下载到 `.bookmontage/tmp`；图片、GIF、视频和文档都可保存。确认采用后再生成正式 `asset`，并用 `derived_from` 指回临时素材。

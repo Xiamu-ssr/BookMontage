@@ -8,6 +8,7 @@ type ItemData = Record<string, unknown> & {
   story?: string; draft?: string; body?: string; file?: string; design?: string;
   voice?: string; role?: string; duration?: number; model?: string; status?: string; cover?: string;
   mime?: string; media_type?: string; source_url?: string; source_page?: string; note?: string;
+  types?: string[]; nodes?: string[]; copyright_sensitive?: boolean;
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
@@ -18,9 +19,12 @@ type WorldTab = 'character' | 'location' | 'faction' | 'prop' | 'relation' | 'te
 type ChapterView = 'overview' | 'detail';
 type PreviewTab = 'video' | 'assets' | 'tech' | 'prompt';
 type FilmScope = 'shot' | 'sequence';
+type GraphEdge = Link & { sourceItem: Item; targetItem: Item };
 
 const docs = [
   { id: 'bookmontage', title: 'BookMontage 使用手册', file: '/docs/bookmontage.md' },
+  { id: 'models', title: '视频模型横评', file: '/docs/video-models.md' },
+  { id: 'copyright', title: 'IP 二创发布风险', file: '/docs/copyright-risk.md' },
   { id: 'seedance25', title: 'Seedance 2.5', file: '/docs/seedance-2.5.md' },
   { id: 'seedance20', title: 'Seedance 2.0', file: '/docs/seedance-2.0.md' },
   { id: 'minimax', title: 'MiniMax H3', file: '/docs/minimax-h3.md' },
@@ -64,11 +68,11 @@ function MediaThumb({ item }: { item?: Item }) {
   return <span className="file-thumb">{String(item.data.file || '').split('.').pop()?.toUpperCase() || 'FILE'}</span>;
 }
 
-function TempPreview({ item }: { item: Item }) {
+function TempPreview({ item, onZoom }: { item: Item; onZoom: (src: string, alt: string) => void }) {
   const kind = String(item.data.media_type || 'document');
   return <div className="temp-preview">
     <div className="temp-stage">
-      {['image','gif'].includes(kind) && <img src={mediaUrl(item)} alt={String(item.data.title || '')} />}
+      {['image','gif'].includes(kind) && <button className="zoomable-media" onClick={() => onZoom(mediaUrl(item), String(item.data.title || '图片'))} aria-label="全屏查看图片"><img src={mediaUrl(item)} alt={String(item.data.title || '')} /></button>}
       {kind === 'video' && <video src={mediaUrl(item)} controls playsInline />}
       {kind === 'document' && <a className="document-preview" href={mediaUrl(item)} target="_blank" rel="noreferrer"><b>{String(item.data.file || '').split('.').pop()?.toUpperCase()}</b><span>打开文档</span></a>}
     </div>
@@ -144,6 +148,74 @@ function DocsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   </div>;
 }
 
+function GraphCanvas({ graph, nodes, edges, media, fullscreen, onFullscreen, onClose }: {
+  graph: Item; nodes: Item[]; edges: GraphEdge[]; media: Map<string, string>;
+  fullscreen?: boolean; onFullscreen?: () => void; onClose?: () => void;
+}) {
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
+  const [drag, setDrag] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const layout = useMemo(() => {
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    const adjacency = new Map(nodes.map(node => [node.id, new Set<string>()]));
+    for (const edge of edges) {
+      if (!byId.has(edge.sourceItem.id) || !byId.has(edge.targetItem.id)) continue;
+      adjacency.get(edge.sourceItem.id)?.add(edge.targetItem.id);
+      adjacency.get(edge.targetItem.id)?.add(edge.sourceItem.id);
+    }
+    const seen = new Set<string>();
+    const components: Item[][] = [];
+    for (const node of nodes) {
+      if (seen.has(node.id)) continue;
+      const component: Item[] = [];
+      const queue = [node.id];
+      seen.add(node.id);
+      while (queue.length) {
+        const id = queue.shift() as string;
+        component.push(byId.get(id) as Item);
+        for (const neighbor of adjacency.get(id) ?? []) if (!seen.has(neighbor)) { seen.add(neighbor); queue.push(neighbor); }
+      }
+      components.push(component);
+    }
+    const positions = new Map<string, { x: number; y: number }>();
+    let y = 90;
+    let width = 1080;
+    for (const component of components) {
+      const columns = Math.max(1, Math.min(5, Math.ceil(Math.sqrt(component.length * 1.5))));
+      const rows = Math.ceil(component.length / columns);
+      const componentWidth = Math.max(300, columns * 190);
+      const left = 90;
+      component.forEach((node, index) => positions.set(node.id, { x: left + (index % columns) * 190, y: y + Math.floor(index / columns) * 145 }));
+      width = Math.max(width, componentWidth + 180);
+      y += Math.max(190, rows * 145 + 90);
+    }
+    return { positions, width, height: Math.max(720, y + 60) };
+  }, [edges, nodes]);
+
+  return <section className={`graph-view ${fullscreen ? 'is-fullscreen' : ''}`}>
+    <header><strong>{graph.data.title}</strong><span>{nodes.length} 个节点</span><nav>
+      <button onClick={() => setScale(Math.max(.45, scale - .15))} aria-label="缩小关系图">−</button>
+      <button onClick={() => { setScale(1); setPan({ x: 0, y: 0 }); }} aria-label="复位关系图">↺</button>
+      <button onClick={() => setScale(Math.min(1.6, scale + .15))} aria-label="放大关系图">＋</button>
+      {fullscreen ? <button onClick={onClose} aria-label="退出全屏">×</button> : <button onClick={onFullscreen} aria-label="全屏查看关系图">⛶</button>}
+    </nav></header>
+    <div className="graph-viewport" onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setDrag({ x:event.clientX, y:event.clientY, panX:pan.x, panY:pan.y }); }} onPointerMove={event => { if (drag) setPan({ x:drag.panX + event.clientX - drag.x, y:drag.panY + event.clientY - drag.y }); }} onPointerUp={() => setDrag(null)} onPointerCancel={() => setDrag(null)}>
+      <div className="graph-world" style={{ width:layout.width, height:layout.height, transform:`translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
+        <svg viewBox={`0 0 ${layout.width} ${layout.height}`} aria-hidden="true">{edges.map(edge => {
+          const source = layout.positions.get(edge.sourceItem.id); const target = layout.positions.get(edge.targetItem.id);
+          if (!source || !target) return null;
+          const x1 = source.x + 70, y1 = source.y + 48, x2 = target.x + 70, y2 = target.y + 48;
+          return <g key={`${edge.source}-${edge.kind}-${edge.target}`}><line x1={x1} y1={y1} x2={x2} y2={y2}/><text x={(x1+x2)/2} y={(y1+y2)/2 - 7}>{relationLabels[edge.kind]}</text></g>;
+        })}</svg>
+        {nodes.map(node => { const position = layout.positions.get(node.id); return position && <article className="graph-node" key={node.id} style={{ left:position.x, top:position.y }}>
+          {media.get(node.id) ? <img src={media.get(node.id)} alt=""/> : <i>{String(node.data.title || '?').slice(0,1)}</i>}
+          <strong>{node.data.title}</strong><span>{typeLabels[node.type]}</span>
+        </article>; })}
+      </div>
+    </div>
+  </section>;
+}
+
 export default function Home() {
   const [library, setLibrary] = useState<Snapshot | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -161,6 +233,9 @@ export default function Home() {
   const [sequenceOffset, setSequenceOffset] = useState(0);
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [graphId, setGraphId] = useState('');
+  const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -173,14 +248,16 @@ export default function Home() {
   useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (docsOpen) setDocsOpen(false);
+      if (lightbox) setLightbox(null);
+      else if (graphFullscreen) setGraphFullscreen(false);
+      else if (docsOpen) setDocsOpen(false);
       else if (previewMenuOpen) setPreviewMenuOpen(false);
       else if (view === 'book' && bookMode === 'chapter' && chapterView === 'detail') setChapterView('overview');
       else if (view === 'book') setView('shelf');
     };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
-  }, [bookMode, chapterView, docsOpen, previewMenuOpen, view]);
+  }, [bookMode, chapterView, docsOpen, graphFullscreen, lightbox, previewMenuOpen, view]);
 
   const items = useMemo(() => {
     const latest = new Map<string, Item>();
@@ -213,10 +290,17 @@ export default function Home() {
   const thumbnailFor = (target?: Item) => target?.type === 'temp_asset' ? target : assetsFor(target)[0] ?? cover;
   const entityAssets = assetsFor(entity);
   const entityAsset = entityAssets[Math.min(assetIndex, Math.max(entityAssets.length - 1, 0))];
-  const relationEdges = links.filter(link => relationLabels[link.kind]).map(link => ({ ...link, sourceItem: itemByLogicalId(link.source), targetItem: itemByLogicalId(link.target) })).filter((link): link is Link & { sourceItem: Item; targetItem: Item } => Boolean(link.sourceItem && link.targetItem));
-  const relationNodes = [...new Map(relationEdges.flatMap(edge => [edge.sourceItem, edge.targetItem]).map(item => [item.id, item])).values()];
-  const relationFocus = relationNodes.find(item => item.id === entityId) ?? relationNodes[0];
-  const focusEdges = relationEdges.filter(edge => edge.sourceItem.id === relationFocus?.id || edge.targetItem.id === relationFocus?.id);
+  const relationEdges = links.filter(link => relationLabels[link.kind]).map(link => ({ ...link, sourceItem: itemByLogicalId(link.source), targetItem: itemByLogicalId(link.target) })).filter((link): link is GraphEdge => Boolean(link.sourceItem && link.targetItem));
+  const relationGraphs = items.filter(item => item.type === 'graph' && item.parent === book?.id);
+  const relationGraph = relationGraphs.find(item => item.id === graphId) ?? relationGraphs[0];
+  const graphNodes = items.filter(item => {
+    const explicit = relationGraph?.data.nodes;
+    if (explicit?.length) return explicit.some(id => id.slice(0, -4) === item.id.slice(0, -4));
+    return (relationGraph?.data.types ?? ['character','faction','relic']).includes(item.type) && item.parent === book?.id;
+  });
+  const graphNodeIds = new Set(graphNodes.map(item => item.id));
+  const graphEdges = relationEdges.filter(edge => graphNodeIds.has(edge.sourceItem.id) && graphNodeIds.has(edge.targetItem.id));
+  const graphMedia = new Map(graphNodes.map(node => [node.id, mediaUrl(node.type === 'temp_asset' ? node : assetsFor(node)[0])]));
   const ambient = chapterFilm ?? clip;
   const remainingShots = Math.max(shots.length - shotIndex, 1);
 
@@ -286,35 +370,24 @@ export default function Home() {
           </div>
           <div className="book-seam" />
           <div className="glass-page asset-page">
-            {entity && entity.type === 'temp_asset' ? <><h1>{entity.data.title}</h1><TempPreview item={entity} /></> : entity && <>
+            {entity && entity.type === 'temp_asset' ? <><h1>{entity.data.title}</h1><TempPreview item={entity} onZoom={(src, alt) => setLightbox({ src, alt })} /></> : entity && <>
               <h1>{entity.data.title}</h1>
               {entityAssets.length > 0 ? <>
                 <div className="asset-switcher">{entityAssets.map((asset, index) => <button key={asset.id} className={assetIndex === index ? 'active' : ''} onClick={() => setAssetIndex(index)}>{asset.data.title}</button>)}</div>
-                <figure className="entity-visual"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /><figcaption>{entityAsset?.data.title}</figcaption></figure>
+                <figure className="entity-visual"><button className="zoomable-media" onClick={() => setLightbox({ src: mediaUrl(entityAsset), alt: String(entityAsset?.data.title || entity.data.title) })} aria-label="全屏查看图片"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /></button><figcaption>{entityAsset?.data.title}</figcaption></figure>
               </> : <div className="text-asset"><p>{entity.data.design}</p></div>}
             </>}
           </div>
         </> : <>
           <div className="glass-page entity-page relation-index">
-            <div className="entity-list">{relationNodes.map(item => <button key={item.id} className={relationFocus?.id === item.id ? 'active' : ''} onClick={() => setEntityId(item.id)}>
-              <img src={mediaUrl(thumbnailFor(item))} alt="" />
-              <span><strong>{item.data.title}</strong><small>{typeLabels[item.type]}</small></span>
+            <div className="entity-list graph-list">{relationGraphs.map(item => <button key={item.id} className={relationGraph?.id === item.id ? 'active' : ''} onClick={() => setGraphId(item.id)}>
+              <i className="graph-thumb">⌘</i>
+              <span><strong>{item.data.title}</strong><small>Graph</small></span>
             </button>)}</div>
           </div>
           <div className="book-seam" />
           <div className="glass-page relation-page">
-            {relationFocus && <><h1>{relationFocus.data.title}</h1><div className="relation-canvas">
-              <article className="relation-node relation-center"><img src={mediaUrl(thumbnailFor(relationFocus))} alt=""/><strong>{relationFocus.data.title}</strong><span>{typeLabels[relationFocus.type]}</span></article>
-              {focusEdges.map((edge, index) => {
-                const outgoing = edge.sourceItem.id === relationFocus.id;
-                const neighbor = outgoing ? edge.targetItem : edge.sourceItem;
-                const angle = (360 / Math.max(focusEdges.length, 1)) * index - 90;
-                return <div className="relation-branch" key={`${edge.source}-${edge.target}-${edge.kind}`} style={{ '--angle': `${angle}deg` } as React.CSSProperties}>
-                  <i/><em>{outgoing ? relationLabels[edge.kind] : `${relationLabels[edge.kind]} · 反向`}</em>
-                  <button onClick={() => setEntityId(neighbor.id)}><img src={mediaUrl(thumbnailFor(neighbor))} alt=""/><strong>{neighbor.data.title}</strong><span>{typeLabels[neighbor.type]}</span></button>
-                </div>;
-              })}
-            </div></>}
+            {relationGraph && <GraphCanvas graph={relationGraph} nodes={graphNodes} edges={graphEdges} media={graphMedia} onFullscreen={() => setGraphFullscreen(true)} />}
           </div>
         </>}
       </>}
@@ -358,6 +431,13 @@ export default function Home() {
         </>}
       </>}
     </section>
+    {lightbox && <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.alt} onMouseDown={event => { if (event.target === event.currentTarget) setLightbox(null); }}>
+      <button className="lightbox-close" onClick={() => setLightbox(null)} aria-label="关闭全屏图片">×</button>
+      <img src={lightbox.src} alt={lightbox.alt} />
+    </div>}
+    {graphFullscreen && relationGraph && <div className="graph-fullscreen" role="dialog" aria-modal="true" aria-label={String(relationGraph.data.title)} onMouseDown={event => { if (event.target === event.currentTarget) setGraphFullscreen(false); }}>
+      <GraphCanvas graph={relationGraph} nodes={graphNodes} edges={graphEdges} media={graphMedia} fullscreen onClose={() => setGraphFullscreen(false)} />
+    </div>}
     <DocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
   </main>;
 }

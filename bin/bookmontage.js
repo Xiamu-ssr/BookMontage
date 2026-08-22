@@ -137,7 +137,16 @@ async function generateVideo(selector) {
   const model = flag('model', 'sapiens-ai/agnes-video-v2.0');
   const duration = Number(flag('duration', '10'));
   const resolution = flag('resolution', '720p');
-  const refs = db.prepare(`SELECT i.id, i.data FROM link l JOIN item i ON i.id=l.target WHERE l.source=? AND l.kind='depends' AND i.type='asset'`).all(shot.id);
+  const refs = db.prepare(`
+    SELECT latest.id, latest.data
+    FROM link l
+    JOIN item linked ON linked.id=l.target
+    JOIN item latest ON substr(latest.id,1,32)=substr(linked.id,1,32)
+    WHERE l.source=? AND l.kind='depends' AND latest.type='asset'
+      AND latest.id=(SELECT max(candidate.id) FROM item candidate WHERE substr(candidate.id,1,32)=substr(linked.id,1,32))
+  `).all(shot.id)
+    .filter(row => !JSON.parse(row.data).copyright_sensitive)
+    .sort((left, right) => Number(Boolean(JSON.parse(right.data).primary)) - Number(Boolean(JSON.parse(left.data).primary)));
   db.close();
   const content = [{ type: 'text', text: shot.data.body }];
   const images = [];
