@@ -288,8 +288,8 @@ export default function Home() {
   const clip = clipFor(shot);
   const sequenceShot = shots[Math.min(shotIndex + sequenceOffset, shots.length - 1)];
   const displayClip = filmScope === 'sequence' ? clipFor(sequenceShot) : clip;
-  const shotRefs = shot ? links.filter(link => link.source === shot.id && ['depends', 'relates'].includes(link.kind)).map(link => itemByLogicalId(link.target)).filter((item): item is Item => Boolean(item)) : [];
-  const shotVisuals = shotRefs.filter(item => item.type === 'asset');
+  const shotRefs = shot ? links.filter(link => link.source === shot.id && link.kind === 'depends').map(link => itemByLogicalId(link.target)).filter((item): item is Item => Boolean(item) && item.type === 'asset') : [];
+  const shotVisuals = shotRefs;
   const worldItems = items.filter(item => {
     if (item.parent !== book?.id) return false;
     if (worldTab === 'temp') return item.type === 'temp_asset';
