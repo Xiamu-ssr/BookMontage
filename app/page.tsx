@@ -28,7 +28,7 @@ const docs = [
   { id: 'seedance25', title: 'Seedance 2.5', file: '/docs/seedance-2.5.md' },
   { id: 'seedance20', title: 'Seedance 2.0', file: '/docs/seedance-2.0.md' },
   { id: 'minimax', title: 'MiniMax H3', file: '/docs/minimax-h3.md' },
-  { id: 'prompt-libraries', title: 'Seedance 实片库', file: '/docs/prompt-libraries.md' },
+  { id: 'prompt-libraries', title: '创作数据源', file: '/docs/prompt-libraries.md' },
 ];
 
 const worldTabs: { id: WorldTab; title: string }[] = [

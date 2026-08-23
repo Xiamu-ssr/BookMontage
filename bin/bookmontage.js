@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
+import { searchSources, sourceCatalogs } from '../lib/sources.js';
 import { cacheRoot, dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, tmpRoot, verifyStore } from '../lib/store.js';
 
 const [command = 'help', ...args] = process.argv.slice(2);
@@ -26,6 +27,12 @@ function help() {
     [--tag action] [--author Soran] [--kind r2v] [--min-images 5]
     [--trending] [--sort relevance|newest|oldest] [--limit 5] [--full] [--refresh]
   bookmontage prompt-facets [--model all|2.5|2.0] [--lang all|zh|en|ja|ko] [--refresh]
+  bookmontage source-list
+  bookmontage source-search [keywords] [--source all|meigen|wallhaven]
+    [--model all|gptimage|nanobanana] [--category <name>]
+    [--sort relevance|popular|newest|random] [--limit 6] [--page 1]
+    [--atleast 1920x1080] [--ratio 16x9] [--color 66ccff]
+    [--proxy http://127.0.0.1:7890] [--full] [--refresh]
   bookmontage revise <id> <patch.json>
   bookmontage links <id|slug|path>
   bookmontage relate <source> <kind> <target>
@@ -398,6 +405,24 @@ try {
     console.log(JSON.stringify(await seedancePromptSearch(args[0]?.startsWith('--') ? '' : args[0]), null, 2));
   } else if (command === 'prompt-facets') {
     console.log(JSON.stringify(await seedancePromptFacets(), null, 2));
+  } else if (command === 'source-list') {
+    console.log(JSON.stringify(sourceCatalogs, null, 2));
+  } else if (command === 'source-search') {
+    console.log(JSON.stringify(await searchSources(args[0]?.startsWith('--') ? '' : args[0], {
+      source:flag('source', 'all'),
+      model:flag('model', 'all'),
+      category:flag('category', 'all'),
+      sort:flag('sort', 'relevance'),
+      limit:flag('limit', '6'),
+      page:flag('page', '1'),
+      atleast:flag('atleast', '1920x1080'),
+      ratio:flag('ratio'),
+      color:flag('color'),
+      topRange:flag('top-range', '1M'),
+      proxy:flag('proxy'),
+      full:args.includes('--full'),
+      refresh:args.includes('--refresh'),
+    }), null, 2));
   } else if (command === 'revise') console.log(reviseItem(args[0],args[1]));
   else if (command === 'links') console.log(listItemLinks(args[0]));
   else if (command === 'relate') console.log(relationCommand('add',args[0],args[1],args[2]));

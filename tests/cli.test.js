@@ -81,6 +81,8 @@ test('help exposes the Seedance example search command', () => {
   assert.match(run(home, 'help'), /--model all\|2\.5\|2\.0/);
   assert.match(run(home, 'help'), /--tag action/);
   assert.match(run(home, 'help'), /prompt-facets/);
+  assert.match(run(home, 'help'), /source-search \[keywords\]/);
+  assert.match(run(home, 'help'), /--source all\|meigen\|wallhaven/);
 });
 
 test('prompt search filters the live catalog by model, tags, author, kind, references and trend', () => {
@@ -106,4 +108,30 @@ test('prompt search filters the live catalog by model, tags, author, kind, refer
   const facets = JSON.parse(run(home, 'prompt-facets', '--model', '2.5'));
   assert.deepEqual(facets.models, [{ value:'2.5', total:2 }]);
   assert.ok(facets.tags.some(item => item.value === 'r2v' && item.total === 2));
+});
+
+test('image source search returns inspectable links without stashing files', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bookmontage-sources-'));
+  mkdirSync(join(home, 'cache'), { recursive:true });
+  writeFileSync(join(home, 'cache', 'image-prompts.json'), JSON.stringify([
+    {
+      id:'100', rank:1, prompt:'A colossal Chinese palace floating above a luminous sea of clouds.',
+      author:'artist_example', likes:1200, views:30000,
+      image:'https://images.example.com/palace.jpg', images:['https://images.example.com/palace.jpg'],
+      model:'nanobanana', categories:['Illustration & 3D'], score:98, date:'2026-04-29',
+      source_url:'https://x.com/artist_example/status/100',
+    },
+  ]));
+  const response = JSON.parse(run(home, 'source-search', 'palace', '--source', 'meigen', '--model', 'nanobanana', '--full'));
+  assert.deepEqual(response.errors, []);
+  assert.equal(response.results.length, 1);
+  assert.equal(response.results[0].title, 'Illustration & 3D · @artist_example');
+  assert.equal(response.results[0].image_url, 'https://images.example.com/palace.jpg');
+  assert.equal(response.results[0].prompt, 'A colossal Chinese palace floating above a luminous sea of clouds.');
+  assert.deepEqual(response.results[0].stash, {
+    url:'https://images.example.com/palace.jpg',
+    title:'Illustration & 3D · @artist_example',
+    source:'https://x.com/artist_example/status/100',
+  });
+  assert.equal(JSON.parse(run(home, 'source-list')).length, 3);
 });
