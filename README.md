@@ -1,30 +1,29 @@
 # BookMontage · 书间
 
-A tiny, local, Harness-first workbench for long-form AI video worlds.
+一个本地优先、Harness-first 的长篇 AI 视频创作工作台。
 
-Humans write rough intent and review the result. Codex, Claude Code, or another capable Harness reads the project Skill, maintains the world bible, resolves dependencies, writes model prompts, and operates the CLI. The interface is deliberately a beautiful reading surface—not an admin dashboard.
+人负责想象、写草稿和审核；Codex、Claude Code 等 Harness 负责维护角色与世界资产、整理章节、编译模型提示词并操作生成流程。前端只做一件事：让人舒适地阅读和判断。
 
-![BookMontage cover](.bookmontage/assets/89b7e502701549b7aeeb2312d7fbe0690001.png)
+![书架](docs/screenshots/bookshelf.png)
 
-## Design
+<p align="center">
+  <img src="docs/screenshots/chapter-assets.png" width="49%" alt="章节与引用资产">
+  <img src="docs/screenshots/manual.png" width="49%" alt="内置创作手册">
+</p>
 
-- One book is the top-level unit.
-- Global facts—characters, places, factions, systems, relics—exist once and are referenced by shots.
-- A shot keeps the human draft, readable `story`, model-ready `body`, and links to assets.
-- Every identity is one 36-character field: 32 hex characters plus a four-digit version.
-- A newer upstream version makes old `depends` links stale; `verify` reports the warning.
-- Everything portable lives under `.bookmontage/`: one SQLite database and its assets. Public JSON is only a disposable UI cache.
+## 核心设计
 
-The database intentionally has two tables:
+- 一本书是最高层级；全局角色、地点、阵营和道具只保存一次，段落只引用。
+- 人类草稿、可读叙事、模型指令和生成视频彼此分层。
+- SQLite 是唯一事实源；`.bookmontage/` 包含全部私人数据与素材，源码仓库不含故事数据或密钥。
+- 所有身份使用一个 36 位版本化 ID；上游资产换版后，下游引用会产生警告。
+- 灵感库保存跨书籍视觉参考，并为 Harness 提供可检索的反向提示词式详细描述。
 
-```text
-item(id, type, parent, data)
-link(source, target, kind)
-```
+数据库只有两张表：`item(id, type, parent, data)` 与 `link(source, target, kind)`。
 
-## Run
+## 本地运行
 
-Requires Node.js 22.13+.
+需要 Node.js 22.13+。
 
 ```bash
 npm install
@@ -33,65 +32,20 @@ npm run bookmontage -- export
 npm run dev
 ```
 
-Open the local URL printed by the dev server. The included **《浪浪山外传：天上来客》** library is a research-only fan-continuation experiment; film-derived references and their dependent drafts are marked copyright-sensitive and must be replaced before production.
-
-Story data is intentionally excluded from this public source repository. Clone the private data repository into `.bookmontage`, then run `npm run bookmontage -- export` before opening the workbench. Secrets are environment variables and never belong in either repository.
-
-## CLI
+常用命令：
 
 ```bash
-npm run bookmontage -- list [type]
+npm run bookmontage -- list
 npm run bookmontage -- show <id|slug|path>
-npm run bookmontage -- prompt <id|slug|path>
+npm run bookmontage -- inspiration-search "云海 巨物奇观" --type 场景 --full
 npm run bookmontage -- prompt-search "仙侠 打斗" --model 2.5 --limit 3 --full
-npm run bookmontage -- prompt-search "天宫" --tag scifi-fantasy --kind r2v --min-images 5
-npm run bookmontage -- prompt-search --trending --model 2.5
-npm run bookmontage -- prompt-facets --model 2.5 --lang zh
-npm run bookmontage -- revise <id> <patch.json>
-npm run bookmontage -- export
-npm run bookmontage -- verify
-npm run bookmontage -- doctor
-npm run bookmontage -- compose <chapter-id>
-```
-
-`prompt` emits a short task that can be pasted into a Harness. `revise` creates the next four-digit version without overwriting history.
-
-## Video generation
-
-The adapter supports ZenMux's native Videos API and automatically falls back to its Vertex-compatible video protocol when a model is not exposed by the native route.
-
-```bash
-export ZENMUX_API_KEY=...
-export NODE_USE_ENV_PROXY=1                 # only when a local proxy is needed
-export HTTPS_PROXY=http://127.0.0.1:7890   # example Clash Verge address
-
-npm run bookmontage -- generate <shot-id> \
-  --model bytedance/doubao-seedance-2.0 \
-  --duration 10 \
-  --resolution 720p
-```
-
-Generated clips are candidate assets. They do not become “approved” merely because the provider returned a file.
-`compose` joins the latest candidate for every shot into a review film with H.264/AAC and a 1280×720 playback canvas; it does not pretend that a low-resolution source became a true 720p master.
-
-## Harness manual
-
-The concise project Skill is at [`skills/bookmontage/SKILL.md`](skills/bookmontage/SKILL.md). It routes to model-specific notes only when needed:
-
-- [Seedance 2.5](skills/bookmontage/references/seedance-2.5.md)
-- [Seedance 2.0](skills/bookmontage/references/seedance-2.0.md)
-- [MiniMax H3](skills/bookmontage/references/minimax-h3.md)
-- [Seedance 实片库与检索命令](skills/bookmontage/references/prompt-libraries.md)
-
-## Verification
-
-```bash
-npm test
-npm run lint
-npm run build
 npm run bookmontage -- verify
 ```
 
-## License
+Harness 的入口是 [`skills/bookmontage/SKILL.md`](skills/bookmontage/SKILL.md)。模型技巧、提示词案例、版权提醒和灵感库规范会由它按任务按需读取。
 
-Code is released under the MIT License. Generated sample media and the fan-continuation concept are provided only as a demonstration; replace them for commercial work and confirm the rights to every reference asset you use.
+## 数据与版权
+
+公开源码与私人数据分仓保存。恢复项目时，将私人数据仓库克隆为 `.bookmontage/`，再执行 `npm run bookmontage -- export`。
+
+代码使用 MIT License。示例媒体、研究截图和第三方参考图不因进入工作台而改变其原有权利状态；生产与公开发布前仍需确认授权。

@@ -8,7 +8,7 @@ type ItemData = Record<string, unknown> & {
   story?: string; draft?: string; body?: string; file?: string; design?: string;
   voice?: string; role?: string; duration?: number; model?: string; status?: string; cover?: string;
   mime?: string; media_type?: string; source_url?: string; source_page?: string; note?: string;
-  types?: string[]; nodes?: string[]; kinds?: string[]; tags?: string[]; detailed_description?: string; created_at?: string; copyright_sensitive?: boolean;
+  types?: string[]; nodes?: string[]; kinds?: string[]; tags?: string[]; detailed_description?: string; source_text?: string; plain_text?: string; text_source_page?: string; rights?: string; created_at?: string; copyright_sensitive?: boolean;
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
@@ -180,13 +180,16 @@ function DocsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 function ImageLightbox({ lightbox, onIndexChange, onClose }: { lightbox: LightboxState | null; onIndexChange: (index: number) => void; onClose: () => void }) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x:0, y:0 });
+  const [fitPercent, setFitPercent] = useState(100);
+  const [fitSize, setFitSize] = useState({ width:0, height:0 });
   const viewport = useRef<HTMLDivElement>(null);
+  const imageElement = useRef<HTMLImageElement>(null);
   const scaleRef = useRef(1);
   const panRef = useRef({ x:0, y:0 });
   const pointers = useRef(new Map<number, { x:number; y:number }>());
   const dragStart = useRef<{ x:number; y:number; panX:number; panY:number } | null>(null);
   const pinchDistance = useRef(0);
-  const clampScale = (value: number) => Math.min(8, Math.max(1, value));
+  const clampScale = (value: number) => Math.min(12, Math.max(1, value));
   const updatePan = useCallback((next: { x:number; y:number }) => {
     panRef.current = next;
     setPan(next);
@@ -212,13 +215,31 @@ function ImageLightbox({ lightbox, onIndexChange, onClose }: { lightbox: Lightbo
     setScale(1);
     updatePan({ x:0, y:0 });
   }, [updatePan]);
+  const measureFit = useCallback(() => {
+    const element = imageElement.current;
+    const frame = viewport.current;
+    if (!element?.naturalWidth || !element.naturalHeight || !frame?.clientWidth || !frame.clientHeight) return;
+    const ratio = Math.min(frame.clientWidth / element.naturalWidth, frame.clientHeight / element.naturalHeight, 1);
+    setFitSize({ width:element.naturalWidth * ratio, height:element.naturalHeight * ratio });
+    setFitPercent(Math.max(1, Math.round(ratio * 100)));
+  }, []);
   const image = lightbox?.images[lightbox.index];
+  useEffect(() => {
+    const target = viewport.current;
+    if (!target || !image) return;
+    const observer = new ResizeObserver(measureFit);
+    observer.observe(target);
+    if (imageElement.current) observer.observe(imageElement.current);
+    measureFit();
+    return () => observer.disconnect();
+  }, [image, measureFit]);
   useEffect(() => {
     const target = viewport.current;
     if (!target || !image) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      zoom(scaleRef.current * Math.exp(-event.deltaY * .0015), { x:event.clientX, y:event.clientY });
+      const sensitivity = event.ctrlKey ? .003 : .00125;
+      zoom(scaleRef.current * Math.exp(-event.deltaY * sensitivity), { x:event.clientX, y:event.clientY });
     };
     target.addEventListener('wheel', onWheel, { passive:false });
     return () => target.removeEventListener('wheel', onWheel);
@@ -226,21 +247,28 @@ function ImageLightbox({ lightbox, onIndexChange, onClose }: { lightbox: Lightbo
   useEffect(() => {
     if (!lightbox) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
       if (event.key === 'ArrowLeft' && lightbox.index > 0) onIndexChange(lightbox.index - 1);
       if (event.key === 'ArrowRight' && lightbox.index + 1 < lightbox.images.length) onIndexChange(lightbox.index + 1);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [lightbox, onIndexChange]);
+  }, [lightbox, onClose, onIndexChange]);
   if (!image || !lightbox) return null;
   const move = (index: number) => {
     if (index < 0 || index >= lightbox.images.length) return;
     reset();
     onIndexChange(index);
   };
+  const displayedPercent = Math.max(1, Math.round(fitPercent * scale));
   return <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={image.alt} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="lightbox-toolbar"><button onClick={() => zoom(scaleRef.current - .35)} aria-label="缩小图片">−</button><button onClick={reset} aria-label="复位图片">↺</button><span>{Math.round(scale * 100)}%</span><button onClick={() => zoom(scaleRef.current + .35)} aria-label="放大图片">＋</button><button onClick={onClose} aria-label="关闭全屏图片">×</button></div>
-    {lightbox.images.length > 1 && <><button className="lightbox-nav previous" disabled={lightbox.index === 0} onClick={() => move(lightbox.index - 1)} aria-label="上一张">‹</button><button className="lightbox-nav next" disabled={lightbox.index + 1 === lightbox.images.length} onClick={() => move(lightbox.index + 1)} aria-label="下一张">›</button><div className="lightbox-caption"><strong><AutoScrollText>{image.alt}</AutoScrollText></strong><span>{lightbox.index + 1} / {lightbox.images.length}</span></div></>}
+    <div className="lightbox-actions">
+      <a href={image.src} download aria-label="下载图片" title="下载图片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M5 20h14"/></svg></a>
+      <button onClick={onClose} aria-label="关闭全屏图片">×</button>
+    </div>
+    {lightbox.images.length > 1 && <><button className="lightbox-nav previous" disabled={lightbox.index === 0} onClick={() => move(lightbox.index - 1)} aria-label="上一张">‹</button><button className="lightbox-nav next" disabled={lightbox.index + 1 === lightbox.images.length} onClick={() => move(lightbox.index + 1)} aria-label="下一张">›</button></>}
+    <div className="lightbox-caption"><strong><AutoScrollText>{image.alt}</AutoScrollText></strong>{lightbox.images.length > 1 && <span>{lightbox.index + 1} / {lightbox.images.length}</span>}</div>
+    <div className="lightbox-zoom"><button onClick={() => zoom(scaleRef.current / 1.25)} aria-label="缩小图片">−</button><button className="lightbox-percent" onClick={reset} aria-label="适配窗口" title="适配窗口">{displayedPercent}%</button><button onClick={() => zoom(scaleRef.current * 1.25)} aria-label="放大图片">＋</button></div>
     <div ref={viewport} className={`lightbox-viewport ${scale > 1 ? 'is-zoomed' : ''}`}
       onDoubleClick={event => zoom(scaleRef.current > 1 ? 1 : 2.5, { x:event.clientX, y:event.clientY })}
       onPointerDown={event => {
@@ -265,13 +293,18 @@ function ImageLightbox({ lightbox, onIndexChange, onClose }: { lightbox: Lightbo
         }
       }}
       onPointerUp={event => {
+        const start = dragStart.current;
+        if (scaleRef.current === 1 && start && Math.hypot(event.clientX - start.x, event.clientY - start.y) < 4) {
+          const rect = imageElement.current?.getBoundingClientRect();
+          if (rect && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) onClose();
+        }
         pointers.current.delete(event.pointerId);
         const remaining = [...pointers.current.values()][0];
         dragStart.current = remaining ? { x:remaining.x, y:remaining.y, panX:panRef.current.x, panY:panRef.current.y } : null;
         pinchDistance.current = 0;
       }}
       onPointerCancel={event => { pointers.current.delete(event.pointerId); dragStart.current = null; pinchDistance.current = 0; }}>
-      <img src={image.src} alt={image.alt} draggable={false} style={{ transform:`translate(${pan.x}px, ${pan.y}px) scale(${scale})` }} />
+      <div className="lightbox-media" style={{ transform:`translate(${pan.x}px, ${pan.y}px)` }}><img ref={imageElement} src={image.src} alt={image.alt} draggable={false} onLoad={measureFit} style={{ width:fitSize.width || undefined, height:fitSize.height || undefined, transform:`scale(${scale})` }} /></div>
     </div>
   </div>;
 }
@@ -621,7 +654,11 @@ export default function Home() {
           <h2>{selectedInspiration.data.title}</h2>
           <p>{[inspirationCategories.find(item => item.id === categoryIdForInspiration(selectedInspiration))?.data.title, subcategoryById.get(String(selectedInspiration.parent))?.data.title].filter(Boolean).join(' / ') || '尚未归类'}</p>
           <div>{[...(selectedInspiration.data.types || []), ...(selectedInspiration.data.tags || [])].map(tag => <span key={tag}>#{tag}</span>)}</div>
+          {selectedInspiration.data.summary && <section className="inspiration-description inspiration-reference"><strong>简介</strong><p>{selectedInspiration.data.summary}</p></section>}
+          {selectedInspiration.data.source_text && <section className="inspiration-description inspiration-reference"><strong>原文</strong><p>{selectedInspiration.data.source_text}</p></section>}
+          {selectedInspiration.data.plain_text && <section className="inspiration-description inspiration-reference"><strong>白话</strong><p>{selectedInspiration.data.plain_text}</p></section>}
           <section className="inspiration-description"><strong>详细描述</strong><p>{selectedInspiration.data.detailed_description || '等待 Harness 逐图补全。'}</p></section>
+          {(selectedInspiration.data.source_page || selectedInspiration.data.text_source_page || selectedInspiration.data.rights) && <footer className="inspiration-sources">{selectedInspiration.data.source_page && <a href={String(selectedInspiration.data.source_page)} target="_blank" rel="noreferrer">画像来源 ↗</a>}{selectedInspiration.data.text_source_page && <a href={String(selectedInspiration.data.text_source_page)} target="_blank" rel="noreferrer">原文来源 ↗</a>}{selectedInspiration.data.rights && <span>{selectedInspiration.data.rights}</span>}</footer>}
           <button className="copy-inspiration" onClick={() => copyAssetPath(selectedInspiration)}><CopyIcon copied={copiedCardId === selectedInspiration.id} /> 复制给 Harness</button>
         </> : <div className="inspector-empty"><span>灵</span><p>选中一张图片查看</p></div>}
       </aside>

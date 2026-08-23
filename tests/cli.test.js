@@ -168,17 +168,28 @@ test('inspiration metadata supports optional two-level classification and versio
   const home = mkdtempSync(join(tmpdir(), 'bookmontage-inspiration-metadata-'));
   const imageFile = join(home, 'portrait.png');
   const descriptionFile = join(home, 'description.txt');
+  const summaryFile = join(home, 'summary.txt');
+  const sourceTextFile = join(home, 'source.txt');
+  const plainTextFile = join(home, 'plain.txt');
   writeFileSync(imageFile, Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
   writeFileSync(descriptionFile, '黑发绿眼女性，穿层叠黑纱长裙，侧光突出金属饰品。');
+  writeFileSync(summaryFile, '招摇山所记异兽。');
+  writeFileSync(sourceTextFile, '伏行人走，其名曰狌狌。');
+  writeFileSync(plainTextFile, '它伏地行动，也能像人一样奔跑。');
   const loose = JSON.parse(run(home, 'inspiration-import', imageFile, '--title', '待整理'));
   assert.equal(loose.parent, null);
   assert.deepEqual(JSON.parse(run(home, 'inspiration-list')).categories, []);
   const revised = JSON.parse(run(home, 'inspiration-update', loose.id,
     '--category', 'WLOP', '--subcategory', '翠眸角色', '--title', '黑纱肖像',
-    '--types', '角色', '--tags', '绿眼,黑纱', '--description-file', descriptionFile));
+    '--types', '角色', '--tags', '绿眼,黑纱', '--description-file', descriptionFile,
+    '--summary-file', summaryFile, '--source-text-file', sourceTextFile, '--plain-text-file', plainTextFile,
+    '--source-page', 'https://example.com/image', '--text-source-page', 'https://example.com/text', '--rights', 'Public domain'));
   assert.match(revised.id, /0002$/);
   assert.deepEqual(revised.data.types, ['角色']);
   assert.equal(revised.data.detailed_description, '黑发绿眼女性，穿层叠黑纱长裙，侧光突出金属饰品。');
+  assert.equal(revised.data.source_text, '伏行人走，其名曰狌狌。');
+  assert.equal(revised.data.plain_text, '它伏地行动，也能像人一样奔跑。');
+  assert.equal(revised.data.rights, 'Public domain');
   const catalog = JSON.parse(run(home, 'inspiration-list', '--category', 'wlop', '--subcategory', '翠眸', '--type', '角色'));
   assert.equal(catalog.categories[0].title, 'WLOP');
   assert.equal(catalog.subcategories[0].title, '翠眸角色');
@@ -188,5 +199,8 @@ test('inspiration metadata supports optional two-level classification and versio
   assert.equal(localSearch.length, 1);
   assert.equal(localSearch[0].title, '黑纱肖像');
   assert.equal(localSearch[0].detailed_description, '黑发绿眼女性，穿层叠黑纱长裙，侧光突出金属饰品。');
+  const textSearch = JSON.parse(run(home, 'inspiration-search', '伏行人走', '--full'));
+  assert.equal(textSearch[0].summary, '招摇山所记异兽。');
+  assert.equal(textSearch[0].source_page, 'https://example.com/image');
   assert.equal(localSearch[0].path, join(home, revised.data.file));
 });

@@ -39,8 +39,12 @@ function help() {
     [--type 角色|场景] [--tag <name>] [--limit 10] [--full]
   bookmontage inspiration-import <image> [--category <name>] [--subcategory <name>]
     --title <name> [--types <角色,场景>] [--tags <a,b>] [--description-file <path>]
+    [--summary-file <path>] [--source-text-file <path>] [--plain-text-file <path>]
+    [--source-page <url>] [--text-source-page <url>] [--rights <text>]
   bookmontage inspiration-update <asset> [--category <name>] [--subcategory <name>]
     [--title <name>] [--types <角色,场景>] [--tags <a,b>] [--description-file <path>]
+    [--summary-file <path>] [--source-text-file <path>] [--plain-text-file <path>]
+    [--source-page <url>] [--text-source-page <url>] [--rights <text>]
   bookmontage inspiration-adopt <asset> --target <character|location|prop> [--title <name>]
   bookmontage revise <id> <patch.json>
   bookmontage links <id|slug|path>
@@ -270,7 +274,7 @@ function searchInspirations(query = '') {
     const subcategory = String(item.subcategory || '');
     const types = item.types || [];
     const tags = item.tags || [];
-    const description = String(item.detailed_description || '');
+    const description = [item.detailed_description, item.summary, item.source_text, item.plain_text].filter(Boolean).join(' ');
     const score = terms.reduce((total, term) => total
       + (title.toLowerCase().includes(term) ? 12 : 0)
       + (subcategory.toLowerCase().includes(term) ? 9 : 0)
@@ -292,7 +296,10 @@ function searchInspirations(query = '') {
       file:item.file,
       path:item.file ? join(dataRoot, item.file) : '',
       score:item.score,
-      ...(full ? { detailed_description:item.detailed_description || '' } : { description_excerpt:`${String(item.detailed_description || '').slice(0, 220)}${String(item.detailed_description || '').length > 220 ? '…' : ''}` }),
+      ...(full ? {
+        detailed_description:item.detailed_description || '', summary:item.summary || '', source_text:item.source_text || '', plain_text:item.plain_text || '',
+        source_page:item.source_page || '', text_source_page:item.text_source_page || '', rights:item.rights || '',
+      } : { description_excerpt:`${String(item.detailed_description || item.summary || '').slice(0, 220)}${String(item.detailed_description || item.summary || '').length > 220 ? '…' : ''}` }),
     }));
 }
 
@@ -509,6 +516,12 @@ try {
       types:String(flag('types', '')).split(/[,，]/),
       tags:String(flag('tags', '')).split(/[,，]/),
       detailed_description:flag('description-file') ? readFileSync(flag('description-file'), 'utf8') : '',
+      summary:flag('summary-file') ? readFileSync(flag('summary-file'), 'utf8') : '',
+      source_text:flag('source-text-file') ? readFileSync(flag('source-text-file'), 'utf8') : '',
+      plain_text:flag('plain-text-file') ? readFileSync(flag('plain-text-file'), 'utf8') : '',
+      source_page:flag('source-page', ''),
+      text_source_page:flag('text-source-page', ''),
+      rights:flag('rights', ''),
     }), null, 2));
   } else if (command === 'inspiration-update') {
     console.log(JSON.stringify(updateInspiration(args[0], {
@@ -518,6 +531,12 @@ try {
       ...(args.includes('--types') ? { types:String(flag('types', '')).split(/[,，]/) } : {}),
       ...(args.includes('--tags') ? { tags:String(flag('tags', '')).split(/[,，]/) } : {}),
       ...(args.includes('--description-file') ? { detailed_description:readFileSync(flag('description-file'), 'utf8') } : {}),
+      ...(args.includes('--summary-file') ? { summary:readFileSync(flag('summary-file'), 'utf8') } : {}),
+      ...(args.includes('--source-text-file') ? { source_text:readFileSync(flag('source-text-file'), 'utf8') } : {}),
+      ...(args.includes('--plain-text-file') ? { plain_text:readFileSync(flag('plain-text-file'), 'utf8') } : {}),
+      ...(args.includes('--source-page') ? { source_page:flag('source-page', '') } : {}),
+      ...(args.includes('--text-source-page') ? { text_source_page:flag('text-source-page', '') } : {}),
+      ...(args.includes('--rights') ? { rights:flag('rights', '') } : {}),
     }), null, 2));
   } else if (command === 'inspiration-adopt') {
     console.log(JSON.stringify(adoptInspiration(args[0], flag('target'), { title:flag('title') }), null, 2));

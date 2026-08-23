@@ -36,6 +36,19 @@
 
 一张图可以同时属于两类，也可以都不选。`tags` 是普通自由标签，写可检索的具体特征，例如 `绿色眼睛`、`黑色薄纱`、`云海`、`巨物奇观`；不要重复标题和分类名，也不要堆同义词。
 
+## 图鉴型素材
+
+古籍异兽、器物图录等素材除视觉描述外，还可以保存：
+
+- `summary`：条目简介，回答“它是什么”。
+- `source_text`：可靠版本的原文，不改写。
+- `plain_text`：Harness 根据原文独立写出的白话解释。
+- `source_page`：画像出处页。
+- `text_source_page`：原文出处页。
+- `rights`：素材权利状态或使用限制。
+
+这些字段解释“对象是什么”，`detailed_description` 仍只负责“这张参考图具体长什么样”。现代受版权保护的绘本、译注与博主插画不能因为被网页展示就批量复制；优先使用公有领域古籍原文和古版画像，白话解释由 Harness 独立撰写。
+
 ## Harness 操作
 
 ```bash
@@ -44,6 +57,7 @@ npm run bookmontage -- inspiration-search "银发 白羽" --category WLOP --type
 npm run bookmontage -- inspiration-search "云海 巨物奇观" --type 场景 --full
 npm run bookmontage -- inspiration-import image.png --category WLOP --subcategory 翠眸黑纱女王 --title 黑纱正面设定 --types 角色 --tags 绿色眼睛,黑色薄纱 --description-file /tmp/description.txt
 npm run bookmontage -- inspiration-update <素材ID> --category WLOP --subcategory 翠眸黑纱女王 --title 黑纱正面设定 --types 角色 --tags 绿色眼睛,黑色薄纱 --description-file /tmp/description.txt
+npm run bookmontage -- inspiration-import old-print.png --category 山海经 --subcategory 九尾狐 --title '九尾狐 · 古图' --types 角色 --description-file /tmp/visual.txt --summary-file /tmp/summary.txt --source-text-file /tmp/original.txt --plain-text-file /tmp/plain.txt --source-page <画像网址> --text-source-page <古籍网址> --rights 'Public domain'
 npm run bookmontage -- export
 npm run bookmontage -- verify
 ```
