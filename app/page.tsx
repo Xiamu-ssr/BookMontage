@@ -8,12 +8,12 @@ type ItemData = Record<string, unknown> & {
   story?: string; draft?: string; body?: string; file?: string; design?: string;
   voice?: string; role?: string; duration?: number; model?: string; status?: string; cover?: string;
   mime?: string; media_type?: string; source_url?: string; source_page?: string; note?: string;
-  types?: string[]; nodes?: string[]; kinds?: string[]; copyright_sensitive?: boolean;
+  types?: string[]; nodes?: string[]; kinds?: string[]; tags?: string[]; created_at?: string; copyright_sensitive?: boolean;
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
 type Snapshot = { format: number; data_root?: string; items: Item[]; links: Link[] };
-type View = 'shelf' | 'book';
+type View = 'shelf' | 'book' | 'inspiration';
 type BookMode = 'world' | 'chapter';
 type WorldTab = 'character' | 'location' | 'faction' | 'prop' | 'relation' | 'temp';
 type ChapterView = 'overview' | 'detail';
@@ -54,7 +54,7 @@ const typeLabels: Record<string, string> = {
 
 function mediaUrl(item?: Item) {
   if (!item?.data.file) return '';
-  const folder = item.type === 'temp_asset' ? 'book-temp' : 'book-assets';
+  const folder = item.type === 'temp_asset' ? 'book-temp' : item.type === 'inspiration_asset' ? 'inspiration-assets' : 'book-assets';
   return `/${folder}/${String(item.data.file).split('/').pop()}`;
 }
 
@@ -247,6 +247,12 @@ export default function Home() {
   const [graphId, setGraphId] = useState('');
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [copiedCardId, setCopiedCardId] = useState('');
+  const [inspirationCategoryId, setInspirationCategoryId] = useState('all');
+  const [inspirationTag, setInspirationTag] = useState('');
+  const [inspirationId, setInspirationId] = useState('');
+  const [pasteDraft, setPasteDraft] = useState<{ dataUrl: string; title: string; category: string; tags: string } | null>(null);
+  const [inspirationNotice, setInspirationNotice] = useState('');
+  const [inspirationSaving, setInspirationSaving] = useState(false);
 
   useEffect(() => {
     fetch('/generated/library.json', { cache: 'no-store' })
@@ -258,16 +264,33 @@ export default function Home() {
   useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (lightbox) setLightbox(null);
+      if (pasteDraft) setPasteDraft(null);
+      else if (lightbox) setLightbox(null);
       else if (graphFullscreen) setGraphFullscreen(false);
       else if (docsOpen) setDocsOpen(false);
       else if (previewMenuOpen) setPreviewMenuOpen(false);
       else if (view === 'book' && bookMode === 'chapter' && chapterView === 'detail') setChapterView('overview');
-      else if (view === 'book') setView('shelf');
+      else if (view === 'book' || view === 'inspiration') setView('shelf');
     };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
-  }, [bookMode, chapterView, docsOpen, graphFullscreen, lightbox, previewMenuOpen, view]);
+  }, [bookMode, chapterView, docsOpen, graphFullscreen, lightbox, pasteDraft, previewMenuOpen, view]);
+
+  useEffect(() => {
+    if (view !== 'inspiration') return;
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input,textarea,[contenteditable="true"]')) return;
+      const image = [...(event.clipboardData?.items ?? [])].find(item => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
+      if (!image) return;
+      event.preventDefault();
+      const reader = new FileReader();
+      reader.onload = () => setPasteDraft({ dataUrl:String(reader.result), title:'未命名灵感', category:'未分类', tags:'' });
+      reader.readAsDataURL(image);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [view]);
 
   const items = useMemo(() => {
     const latest = new Map<string, Item>();
@@ -277,6 +300,12 @@ export default function Home() {
   const links = library?.links ?? [];
   const itemByLogicalId = (id: string) => items.find(item => item.id.slice(0, -4) === id.slice(0, -4));
   const books = items.filter(item => item.type === 'book');
+  const inspirationCategories = items.filter(item => item.type === 'inspiration_category');
+  const allInspirations = items.filter(item => item.type === 'inspiration_asset');
+  const inspirationTags = [...new Set(allInspirations.flatMap(item => item.data.tags ?? []))].sort((left, right) => left.localeCompare(right, 'zh-CN'));
+  const inspirations = allInspirations.filter(item => (inspirationCategoryId === 'all' || item.parent === inspirationCategoryId)
+    && (!inspirationTag || item.data.tags?.includes(inspirationTag)));
+  const selectedInspiration = inspirations.find(item => item.id === inspirationId) ?? inspirations[0];
   const book = books.find(item => item.id === selectedBookId) ?? books[0];
   const chapters = items.filter(item => item.type === 'chapter' && item.parent === book?.id);
   const chapter = chapters.find(item => item.id === chapterId) ?? chapters[0];
@@ -332,6 +361,47 @@ export default function Home() {
     window.setTimeout(() => setCopiedCardId(current => current === item.id ? '' : current), 1600);
   }
 
+  function draftImage(file?: File | null) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => setPasteDraft({
+      dataUrl:String(reader.result),
+      title:file.name.replace(/\.[^.]+$/, '') || '未命名灵感',
+      category:String(inspirationCategories.find(item => item.id === inspirationCategoryId)?.data.title || '未分类'),
+      tags:'',
+    });
+    reader.readAsDataURL(file);
+  }
+
+  async function savePasteDraft() {
+    if (!pasteDraft) return;
+    setInspirationSaving(true);
+    setInspirationNotice('');
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/inspirations', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({
+          data_url:pasteDraft.dataUrl,
+          title:pasteDraft.title,
+          category:pasteDraft.category,
+          tags:pasteDraft.tags.split(/[,，]/).map(tag => tag.trim()).filter(Boolean),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      setLibrary(result.snapshot);
+      setInspirationCategoryId(result.item.parent);
+      setInspirationId(result.item.id);
+      setPasteDraft(null);
+      setInspirationNotice('已存入私人灵感库');
+    } catch (error) {
+      setInspirationNotice(error instanceof Error ? `${error.message}。请确认本地 BookMontage 正在运行。` : String(error));
+    } finally {
+      setInspirationSaving(false);
+    }
+  }
+
   function selectShot(index: number) {
     setShotIndex(index);
     setPreviewTab('video');
@@ -361,12 +431,72 @@ export default function Home() {
 
   if (!library || !book) return <main className="loading"><span>书间</span><p>{loadError || '正在读取藏书'}</p></main>;
 
+  if (view === 'inspiration') return <main className="inspiration-stage">
+    <div className="workspace-wash" />
+    <header className="workspace-header inspiration-header">
+      <button className="back-button" onClick={() => setView('shelf')} aria-label="返回书架">← <span>书架</span></button>
+      <div className="wordmark"><span>BOOKMONTAGE</span><i>#</i><strong>灵感库</strong></div>
+      <DocsButton onClick={() => setDocsOpen(true)} />
+    </header>
+    <section className="inspiration-shell">
+      <aside className="inspiration-categories">
+        <header><span>分类</span><b>{allInspirations.length}</b></header>
+        <button className={inspirationCategoryId === 'all' ? 'active' : ''} onClick={() => { setInspirationCategoryId('all'); setInspirationTag(''); setInspirationId(''); }}><strong>全部</strong><span>{allInspirations.length}</span></button>
+        {inspirationCategories.map(category => <button key={category.id} className={inspirationCategoryId === category.id ? 'active' : ''} onClick={() => { setInspirationCategoryId(category.id); setInspirationTag(''); setInspirationId(''); }}>
+          <strong>{category.data.title}</strong><span>{allInspirations.filter(item => item.parent === category.id).length}</span>
+        </button>)}
+      </aside>
+      <div className="inspiration-catalog">
+        <header className="inspiration-toolbar">
+          <div><h1>{inspirationCategoryId === 'all' ? '全部灵感' : inspirationCategories.find(item => item.id === inspirationCategoryId)?.data.title}</h1><p>粘贴截图，写下标题，剩下的交给 Harness 整理。</p></div>
+          <label className="file-pick">选择图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={event => draftImage(event.target.files?.[0])} /></label>
+        </header>
+        {inspirationTags.length > 0 && <nav className="inspiration-tags" aria-label="标签筛选"><button className={!inspirationTag ? 'active' : ''} onClick={() => setInspirationTag('')}>全部标签</button>{inspirationTags.map(tag => <button key={tag} className={inspirationTag === tag ? 'active' : ''} onClick={() => setInspirationTag(tag)}>#{tag}</button>)}</nav>}
+        <div className={`inspiration-grid ${inspirations.length ? '' : 'is-empty'}`}>
+          {!inspirations.length && <div className="paste-hint"><kbd>⌘ V</kbd><strong>把喜欢的画面贴进来</strong><span>也支持 Ctrl V 或选择本地图片</span></div>}
+          {inspirations.map(item => <article key={item.id} className={`inspiration-card ${selectedInspiration?.id === item.id ? 'active' : ''}`}>
+            <button className="inspiration-select" onClick={() => setInspirationId(item.id)} onDoubleClick={() => setLightbox({ src:mediaUrl(item), alt:String(item.data.title) })}>
+              <img src={mediaUrl(item)} alt={String(item.data.title || '')} />
+              <span><strong>{item.data.title}</strong><em>{item.data.tags?.map(tag => `#${tag}`).join(' ') || '未加标签'}</em></span>
+            </button>
+            <button className="copy-path" onClick={() => copyAssetPath(item)} aria-label={`复制${item.data.title}的文件位置`} title="复制名称与文件位置"><CopyIcon copied={copiedCardId === item.id} /></button>
+          </article>)}
+        </div>
+      </div>
+      <aside className="inspiration-inspector">
+        {selectedInspiration ? <>
+          <button className="inspector-image" onClick={() => setLightbox({ src:mediaUrl(selectedInspiration), alt:String(selectedInspiration.data.title) })} aria-label="全屏查看灵感图片"><img src={mediaUrl(selectedInspiration)} alt="" /></button>
+          <h2>{selectedInspiration.data.title}</h2>
+          <p>{inspirationCategories.find(item => item.id === selectedInspiration.parent)?.data.title || '未分类'}</p>
+          <div>{selectedInspiration.data.tags?.map(tag => <span key={tag}>#{tag}</span>)}</div>
+          <button className="copy-inspiration" onClick={() => copyAssetPath(selectedInspiration)}><CopyIcon copied={copiedCardId === selectedInspiration.id} /> 复制给 Harness</button>
+        </> : <div className="inspector-empty"><span>灵</span><p>选中一张图片查看</p></div>}
+      </aside>
+    </section>
+    {inspirationNotice && <div className="inspiration-notice" role="status">{inspirationNotice}</div>}
+    {pasteDraft && <div className="paste-overlay" role="dialog" aria-modal="true" aria-label="保存粘贴图片" onMouseDown={event => { if (event.target === event.currentTarget) setPasteDraft(null); }}>
+      <section className="paste-sheet">
+        <img src={pasteDraft.dataUrl} alt="粘贴预览" />
+        <form onSubmit={event => { event.preventDefault(); savePasteDraft(); }}>
+          <span>存入灵感库</span>
+          <label>标题<input autoFocus value={pasteDraft.title} onChange={event => setPasteDraft({ ...pasteDraft, title:event.target.value })} /></label>
+          <label>一级分类<input list="inspiration-category-options" value={pasteDraft.category} onChange={event => setPasteDraft({ ...pasteDraft, category:event.target.value })} /></label>
+          <datalist id="inspiration-category-options">{inspirationCategories.map(category => <option key={category.id} value={String(category.data.title)} />)}</datalist>
+          <label>标签<input value={pasteDraft.tags} onChange={event => setPasteDraft({ ...pasteDraft, tags:event.target.value })} placeholder="仙侠，天宫，云海" /></label>
+          <footer><button type="button" onClick={() => setPasteDraft(null)}>取消</button><button className="save-inspiration" disabled={inspirationSaving || !pasteDraft.title.trim()}>{inspirationSaving ? '正在保存' : '保存'}</button></footer>
+        </form>
+      </section>
+    </div>}
+    {lightbox && <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.alt} onMouseDown={event => { if (event.target === event.currentTarget) setLightbox(null); }}><button className="lightbox-close" onClick={() => setLightbox(null)} aria-label="关闭全屏图片">×</button><img src={lightbox.src} alt={lightbox.alt} /></div>}
+    <DocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
+  </main>;
+
   if (view === 'shelf') return <main className="home-stage">
     {ambient && <video className="ambient-video" src={mediaUrl(ambient)} poster={mediaUrl(cover)} autoPlay muted loop playsInline />}
     <div className="home-wash" />
     <header className="home-header">
       <div className="wordmark"><span>BOOKMONTAGE</span><i>#</i><strong>书间</strong></div>
-      <DocsButton onClick={() => setDocsOpen(true)} />
+      <div className="home-actions"><button className="inspiration-entry" onClick={() => setView('inspiration')}><span>▧</span> 灵感库</button><DocsButton onClick={() => setDocsOpen(true)} /></div>
     </header>
     <section className="bookshelf" aria-label="书架">
       <div className="shelf-lines" aria-hidden="true"><i/><i/><i/></div>

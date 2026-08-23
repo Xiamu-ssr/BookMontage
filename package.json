@@ -10,7 +10,7 @@
   },
   "scripts": {
     "bookmontage": "node ./bin/bookmontage.js",
-    "dev": "vinext dev",
+    "dev": "node ./bin/dev.js",
     "build": "vinext build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",

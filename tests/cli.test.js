@@ -83,6 +83,8 @@ test('help exposes the Seedance example search command', () => {
   assert.match(run(home, 'help'), /prompt-facets/);
   assert.match(run(home, 'help'), /source-search \[keywords\]/);
   assert.match(run(home, 'help'), /--source all\|meigen\|wallhaven/);
+  assert.match(run(home, 'help'), /inspiration-import <image>/);
+  assert.match(run(home, 'help'), /inspiration-adopt <asset>/);
 });
 
 test('prompt search filters the live catalog by model, tags, author, kind, references and trend', () => {
@@ -134,4 +136,28 @@ test('image source search returns inspectable links without stashing files', () 
     source:'https://x.com/artist_example/status/100',
   });
   assert.equal(JSON.parse(run(home, 'source-list')).length, 3);
+});
+
+test('the global inspiration library classifies images and derives book assets without copying metadata', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bookmontage-inspiration-'));
+  const bundleFile = join(home, 'bundle.json');
+  const imageFile = join(home, 'heaven.png');
+  writeFileSync(bundleFile, JSON.stringify({ items:[
+    { id:'111111111111111111111111111111110001', type:'book', data:{ title:'Test' } },
+    { id:'222222222222222222222222222222220001', type:'location', parent:'111111111111111111111111111111110001', data:{ title:'Cloud Palace', slug:'cloud-palace' } },
+  ], links:[] }));
+  writeFileSync(imageFile, Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
+  run(home, 'import', bundleFile);
+  const inspiration = JSON.parse(run(home, 'inspiration-import', imageFile, '--category', 'WLOP', '--title', 'Cloud court', '--tags', 'xianxia,clouds'));
+  assert.equal(inspiration.type, 'inspiration_asset');
+  assert.ok(readFileSync(join(home, inspiration.data.file)).equals(readFileSync(imageFile)));
+  const catalog = JSON.parse(run(home, 'inspiration-list', '--category', 'wlop', '--tag', 'clouds'));
+  assert.equal(catalog.assets.length, 1);
+  assert.deepEqual(catalog.assets[0].tags, ['xianxia','clouds']);
+  const adopted = JSON.parse(run(home, 'inspiration-adopt', inspiration.id, '--target', 'cloud-palace', '--title', 'Cloud court concept'));
+  assert.equal(adopted.type, 'asset');
+  assert.equal(adopted.parent, '111111111111111111111111111111110001');
+  assert.match(run(home, 'links', 'cloud-palace'), new RegExp(`out\\tdepends\\t${adopted.id}`));
+  assert.match(run(home, 'links', adopted.id), new RegExp(`out\\tderived_from\\t${inspiration.id}`));
+  assert.deepEqual(JSON.parse(run(home, 'verify')).errors, []);
 });

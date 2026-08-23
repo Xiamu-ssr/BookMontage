@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
+import { adoptInspiration, importInspirationFile } from '../lib/inspirations.js';
 import { searchSources, sourceCatalogs } from '../lib/sources.js';
 import { cacheRoot, dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, tmpRoot, verifyStore } from '../lib/store.js';
 
@@ -33,6 +34,9 @@ function help() {
     [--sort relevance|popular|newest|random] [--limit 6] [--page 1]
     [--atleast 1920x1080] [--ratio 16x9] [--color 66ccff]
     [--proxy http://127.0.0.1:7890] [--full] [--refresh]
+  bookmontage inspiration-list [--category <name>] [--tag <name>]
+  bookmontage inspiration-import <image> --category <name> --title <name> [--tags <a,b>]
+  bookmontage inspiration-adopt <asset> --target <character|location|prop> [--title <name>]
   bookmontage revise <id> <patch.json>
   bookmontage links <id|slug|path>
   bookmontage relate <source> <kind> <target>
@@ -220,6 +224,21 @@ async function stashRemote(url) {
   db.close();
   exportSnapshot();
   return id;
+}
+
+function listInspirations() {
+  const db = openStore();
+  const category = flag('category', '').trim().toLowerCase();
+  const tag = flag('tag', '').trim().toLowerCase();
+  const categories = db.prepare("SELECT id,data FROM item WHERE type='inspiration_category' ORDER BY rowid").all()
+    .map(row => ({ id:row.id, ...JSON.parse(row.data) }));
+  const categoryById = new Map(categories.map(item => [item.id, item.title]));
+  const assets = db.prepare("SELECT id,parent,data FROM item WHERE type='inspiration_asset' ORDER BY rowid DESC").all()
+    .map(row => ({ id:row.id, parent:row.parent, ...JSON.parse(row.data), category:categoryById.get(row.parent) || '未分类' }))
+    .filter(item => (!category || String(item.category).toLowerCase().includes(category))
+      && (!tag || (item.tags || []).some(value => String(value).toLowerCase() === tag)));
+  db.close();
+  return { categories, assets };
 }
 
 function relationCommand(mode, sourceSelector, kind, targetSelector) {
@@ -423,6 +442,16 @@ try {
       full:args.includes('--full'),
       refresh:args.includes('--refresh'),
     }), null, 2));
+  } else if (command === 'inspiration-list') {
+    console.log(JSON.stringify(listInspirations(), null, 2));
+  } else if (command === 'inspiration-import') {
+    console.log(JSON.stringify(importInspirationFile(args[0], {
+      category:flag('category', '未分类'),
+      title:flag('title', args[0]?.split('/').pop() || '未命名灵感'),
+      tags:String(flag('tags', '')).split(/[,，]/),
+    }), null, 2));
+  } else if (command === 'inspiration-adopt') {
+    console.log(JSON.stringify(adoptInspiration(args[0], flag('target'), { title:flag('title') }), null, 2));
   } else if (command === 'revise') console.log(reviseItem(args[0],args[1]));
   else if (command === 'links') console.log(listItemLinks(args[0]));
   else if (command === 'relate') console.log(relationCommand('add',args[0],args[1],args[2]));
