@@ -406,6 +406,7 @@ export default function Home() {
   const [pasteDraft, setPasteDraft] = useState<{ dataUrl: string; title: string; category: string; subcategory: string; types: string[]; tags: string; detailedDescription: string } | null>(null);
   const [inspirationNotice, setInspirationNotice] = useState('');
   const [inspirationSaving, setInspirationSaving] = useState(false);
+  const inspirationInspector = useRef<HTMLElement>(null);
 
   useEffect(() => {
     fetch('/generated/library.json', { cache: 'no-store' })
@@ -465,6 +466,11 @@ export default function Home() {
     && (inspirationSubcategoryId === 'all' || item.parent === inspirationSubcategoryId)
     && (!inspirationTag || item.data.tags?.includes(inspirationTag)));
   const selectedInspiration = inspirations.find(item => item.id === inspirationId) ?? inspirations[0];
+  const selectedInspirationId = selectedInspiration?.id;
+  useEffect(() => {
+    if (view !== 'inspiration' || !selectedInspirationId) return;
+    inspirationInspector.current?.scrollTo({ top:0, left:0 });
+  }, [selectedInspirationId, view]);
   const book = books.find(item => item.id === selectedBookId) ?? books[0];
   const chapters = items.filter(item => item.type === 'chapter' && item.parent === book?.id);
   const chapter = chapters.find(item => item.id === chapterId) ?? chapters[0];
@@ -648,7 +654,7 @@ export default function Home() {
           </article>)}
         </div>
       </div>
-      <aside className="inspiration-inspector">
+      <aside ref={inspirationInspector} className="inspiration-inspector">
         {selectedInspiration ? <>
           <button className="inspector-image" onClick={() => openLightbox(inspirations, selectedInspiration)} aria-label="全屏查看灵感图片"><img src={mediaUrl(selectedInspiration)} alt="" /></button>
           <h2>{selectedInspiration.data.title}</h2>
