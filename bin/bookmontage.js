@@ -35,6 +35,8 @@ function help() {
     [--atleast 1920x1080] [--ratio 16x9] [--color 66ccff]
     [--proxy http://127.0.0.1:7890] [--full] [--refresh]
   bookmontage inspiration-list [--category <name>] [--subcategory <name>] [--type 角色|场景] [--tag <name>]
+  bookmontage inspiration-search [keywords] [--category <name>] [--subcategory <name>]
+    [--type 角色|场景] [--tag <name>] [--limit 10] [--full]
   bookmontage inspiration-import <image> [--category <name>] [--subcategory <name>]
     --title <name> [--types <角色,场景>] [--tags <a,b>] [--description-file <path>]
   bookmontage inspiration-update <asset> [--category <name>] [--subcategory <name>]
@@ -257,6 +259,43 @@ function listInspirations() {
   return { categories, subcategories, assets };
 }
 
+function searchInspirations(query = '') {
+  const catalog = listInspirations();
+  const terms = String(query).trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const limit = Math.max(1, Math.min(100, Number(flag('limit', '10')) || 10));
+  const full = args.includes('--full');
+  return catalog.assets.map(item => {
+    const title = String(item.title || '');
+    const category = String(item.category || '');
+    const subcategory = String(item.subcategory || '');
+    const types = item.types || [];
+    const tags = item.tags || [];
+    const description = String(item.detailed_description || '');
+    const score = terms.reduce((total, term) => total
+      + (title.toLowerCase().includes(term) ? 12 : 0)
+      + (subcategory.toLowerCase().includes(term) ? 9 : 0)
+      + (category.toLowerCase().includes(term) ? 6 : 0)
+      + (types.some(value => String(value).toLowerCase().includes(term)) ? 5 : 0)
+      + (tags.some(value => String(value).toLowerCase().includes(term)) ? 4 : 0)
+      + (description.toLowerCase().includes(term) ? 1 : 0), 0);
+    return { ...item, score };
+  }).filter(item => terms.length === 0 || item.score > 0)
+    .sort((left, right) => right.score - left.score || String(right.updated_at || right.created_at || '').localeCompare(String(left.updated_at || left.created_at || '')))
+    .slice(0, limit)
+    .map(item => ({
+      id:item.id,
+      title:item.title,
+      category:item.category,
+      subcategory:item.subcategory,
+      types:item.types || [],
+      tags:item.tags || [],
+      file:item.file,
+      path:item.file ? join(dataRoot, item.file) : '',
+      score:item.score,
+      ...(full ? { detailed_description:item.detailed_description || '' } : { description_excerpt:`${String(item.detailed_description || '').slice(0, 220)}${String(item.detailed_description || '').length > 220 ? '…' : ''}` }),
+    }));
+}
+
 function relationCommand(mode, sourceSelector, kind, targetSelector) {
   if (!/^[a-z][a-z0-9_]*$/.test(kind || '')) throw new Error(`Invalid relation kind: ${kind}`);
   if (['depends','derived_from','relates'].includes(kind)) throw new Error(`${kind} is reserved for production links`);
@@ -460,6 +499,8 @@ try {
     }), null, 2));
   } else if (command === 'inspiration-list') {
     console.log(JSON.stringify(listInspirations(), null, 2));
+  } else if (command === 'inspiration-search') {
+    console.log(JSON.stringify(searchInspirations(args[0]?.startsWith('--') ? '' : args[0]), null, 2));
   } else if (command === 'inspiration-import') {
     console.log(JSON.stringify(importInspirationFile(args[0], {
       category:flag('category', ''),

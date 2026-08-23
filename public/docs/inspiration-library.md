@@ -31,9 +31,13 @@
 
 ```bash
 npm run bookmontage -- inspiration-list --category WLOP
+npm run bookmontage -- inspiration-search "银发 白羽" --category WLOP --type 角色 --limit 8
+npm run bookmontage -- inspiration-search "云海 巨物奇观" --type 场景 --full
 npm run bookmontage -- inspiration-update <素材ID> --category WLOP --subcategory 翠眸黑纱女王 --title 黑纱正面设定 --types 角色 --tags 绿色眼睛,黑色薄纱 --description-file /tmp/description.txt
 npm run bookmontage -- export
 npm run bookmontage -- verify
 ```
 
 元数据修订会产生同一 UUID 的新版本，旧版本保留用于追溯。
+
+`inspiration-search` 只搜索已保存到私人灵感库的图片，范围包括标题、两级分类、类型、标签和详细描述；结果带绝对文件位置。默认返回短摘要，加 `--full` 返回完整详细描述。联网找新图使用 `source-search`，不会与私人库混在一起。

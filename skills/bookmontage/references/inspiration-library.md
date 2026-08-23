@@ -38,6 +38,8 @@
 
 ```bash
 npm run bookmontage -- inspiration-list --category WLOP
+npm run bookmontage -- inspiration-search "银发 白羽" --category WLOP --type 角色 --limit 8
+npm run bookmontage -- inspiration-search "云海 巨物奇观" --type 场景 --full
 npm run bookmontage -- inspiration-import image.png --category WLOP --subcategory 翠眸黑纱女王 --title 黑纱正面设定 --types 角色 --tags 绿色眼睛,黑色薄纱 --description-file /tmp/description.txt
 npm run bookmontage -- inspiration-update <素材ID> --category WLOP --subcategory 翠眸黑纱女王 --title 黑纱正面设定 --types 角色 --tags 绿色眼睛,黑色薄纱 --description-file /tmp/description.txt
 npm run bookmontage -- export
@@ -45,3 +47,5 @@ npm run bookmontage -- verify
 ```
 
 元数据修订会产生同一 UUID 的新版本，旧版本保留用于追溯。整理完成后必须导出展示缓存并验证文件与引用。
+
+`inspiration-search` 只查本地私人库，检索范围包括标题、一级/二级分类、类型、标签和详细描述；默认返回短摘要，加 `--full` 才返回完整详细描述。返回值中的 `path` 是绝对文件位置，可直接交给 Harness 或图像模型。互联网数据源仍使用 `source-search`，两者不混库。

@@ -84,6 +84,7 @@ test('help exposes the Seedance example search command', () => {
   assert.match(run(home, 'help'), /source-search \[keywords\]/);
   assert.match(run(home, 'help'), /--source all\|meigen\|wallhaven/);
   assert.match(run(home, 'help'), /inspiration-import <image>/);
+  assert.match(run(home, 'help'), /inspiration-search \[keywords\]/);
   assert.match(run(home, 'help'), /inspiration-update <asset>/);
   assert.match(run(home, 'help'), /inspiration-adopt <asset>/);
 });
@@ -183,4 +184,9 @@ test('inspiration metadata supports optional two-level classification and versio
   assert.equal(catalog.subcategories[0].title, '翠眸角色');
   assert.equal(catalog.assets.length, 1);
   assert.equal(catalog.assets[0].title, '黑纱肖像');
+  const localSearch = JSON.parse(run(home, 'inspiration-search', '绿眼 金属', '--category', 'wlop', '--type', '角色', '--full'));
+  assert.equal(localSearch.length, 1);
+  assert.equal(localSearch[0].title, '黑纱肖像');
+  assert.equal(localSearch[0].detailed_description, '黑发绿眼女性，穿层叠黑纱长裙，侧光突出金属饰品。');
+  assert.equal(localSearch[0].path, join(home, revised.data.file));
 });

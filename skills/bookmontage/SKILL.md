@@ -21,6 +21,8 @@ SQLite 是唯一事实源。不要手改 `public/generated/library.json`，它�
 
 “灵感库”跨越所有书籍，用于保存人类手动截图或粘贴的私人视觉参考。图片只存一份于 `.bookmontage/inspirations`；一级来源/合集使用 `inspiration_category`，二级角色或场景组使用 `inspiration_subcategory`，图片使用 `inspiration_asset`。Harness 接手新图后必须逐张观察并补齐标题、二级分类、可选类型标签、普通标签与反向提示词式 `detailed_description`；具体规则见[灵感库维护手册](references/inspiration-library.md)。需要正式采用时，用 `inspiration-adopt <灵感图> --target <角色或地图>` 派生新的书内 `asset`；新资产用 `derived_from` 指回灵感图，禁止覆盖或复制元数据。
 
+私人库与互联网来源分开检索：`inspiration-search [关键词]` 搜 `.bookmontage` 中已经保存的灵感图，会返回标题、分类、标签、描述摘要和可直接复制的绝对路径；`source-search` 才搜索外部图片来源。先搜私人库，找不到再查外部来源，禁止把联网结果偷偷写进灵感库。
+
 构思角色、场景或镜头前，先用 `source-list` 查看可用图像来源，再用 `source-search [关键词] --source <meigen|wallhaven>` 检索。结果只返回标题、图片链接、原页面、提示词和热度等元数据，不会自动写入项目。Harness 必须先审视结果；只有决定保留时，才把结果中的 `stash.url` 交给 `stash`。默认把图片当视觉参考，不默认拥有复制、训练或商用权利。
 
 写提示词时，只读取当前模型对应的说明：[Seedance 2.5](references/seedance-2.5.md)、[Seedance 2.0](references/seedance-2.0.md) 或 [MiniMax H3](references/minimax-h3.md)。同一叙事目标可以共用，但必须按目标模型的官方结构重新编译，禁止原样发送同一版。

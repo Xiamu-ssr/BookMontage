@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- local mutable assets should not enter an image optimizer cache */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type ItemData = Record<string, unknown> & {
   title?: string; slug?: string; path?: string; subtitle?: string; summary?: string;
@@ -20,6 +20,8 @@ type ChapterView = 'overview' | 'detail';
 type PreviewTab = 'video' | 'assets' | 'tech' | 'prompt';
 type FilmScope = 'shot' | 'sequence';
 type GraphEdge = Link & { sourceItem: Item; targetItem: Item };
+type LightboxImage = { src: string; alt: string };
+type LightboxState = { images: LightboxImage[]; index: number };
 
 const docs = [
   { id: 'bookmontage', title: 'BookMontage 使用手册', file: '/docs/bookmontage.md' },
@@ -68,6 +70,23 @@ function MediaThumb({ item }: { item?: Item }) {
 
 function CopyIcon({ copied = false }: { copied?: boolean }) {
   return <span aria-hidden="true">{copied ? '✓' : '⧉'}</span>;
+}
+
+function AutoScrollText({ children }: { children: React.ReactNode }) {
+  const frame = useRef<HTMLSpanElement>(null);
+  const content = useRef<HTMLSpanElement>(null);
+  const [overflow, setOverflow] = useState(0);
+  useEffect(() => {
+    const measure = () => setOverflow(Math.max(0, (content.current?.scrollWidth ?? 0) - (frame.current?.clientWidth ?? 0)));
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (frame.current) observer.observe(frame.current);
+    if (content.current) observer.observe(content.current);
+    return () => observer.disconnect();
+  }, [children]);
+  return <span ref={frame} className={`auto-scroll-text ${overflow > 1 ? 'is-overflowing' : ''}`} style={{ '--scroll-distance': `${overflow}px`, '--scroll-duration': `${Math.max(5, overflow / 15)}s` } as React.CSSProperties}>
+    <span ref={content}>{children}</span>
+  </span>;
 }
 
 function TempPreview({ item, onZoom }: { item: Item; onZoom: (src: string, alt: string) => void }) {
@@ -158,28 +177,76 @@ function DocsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   </div>;
 }
 
-function ImageLightbox({ image, onClose }: { image: { src: string; alt: string } | null; onClose: () => void }) {
+function ImageLightbox({ lightbox, onIndexChange, onClose }: { lightbox: LightboxState | null; onIndexChange: (index: number) => void; onClose: () => void }) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x:0, y:0 });
+  const viewport = useRef<HTMLDivElement>(null);
+  const scaleRef = useRef(1);
+  const panRef = useRef({ x:0, y:0 });
   const pointers = useRef(new Map<number, { x:number; y:number }>());
   const dragStart = useRef<{ x:number; y:number; panX:number; panY:number } | null>(null);
   const pinchDistance = useRef(0);
-  if (!image) return null;
   const clampScale = (value: number) => Math.min(8, Math.max(1, value));
-  const zoom = (next: number) => {
+  const updatePan = useCallback((next: { x:number; y:number }) => {
+    panRef.current = next;
+    setPan(next);
+  }, []);
+  const zoom = useCallback((next: number, anchor?: { x:number; y:number }) => {
     const value = clampScale(next);
+    const previous = scaleRef.current;
+    scaleRef.current = value;
     setScale(value);
-    if (value === 1) setPan({ x:0, y:0 });
+    if (value === 1) updatePan({ x:0, y:0 });
+    else if (anchor && previous > 0) {
+      const rect = viewport.current?.getBoundingClientRect();
+      if (rect) {
+        const x = anchor.x - rect.left - rect.width / 2;
+        const y = anchor.y - rect.top - rect.height / 2;
+        const ratio = value / previous;
+        updatePan({ x:x - (x - panRef.current.x) * ratio, y:y - (y - panRef.current.y) * ratio });
+      }
+    }
+  }, [updatePan]);
+  const reset = useCallback(() => {
+    scaleRef.current = 1;
+    setScale(1);
+    updatePan({ x:0, y:0 });
+  }, [updatePan]);
+  const image = lightbox?.images[lightbox.index];
+  useEffect(() => {
+    const target = viewport.current;
+    if (!target || !image) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      zoom(scaleRef.current * Math.exp(-event.deltaY * .0015), { x:event.clientX, y:event.clientY });
+    };
+    target.addEventListener('wheel', onWheel, { passive:false });
+    return () => target.removeEventListener('wheel', onWheel);
+  }, [image, zoom]);
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft' && lightbox.index > 0) onIndexChange(lightbox.index - 1);
+      if (event.key === 'ArrowRight' && lightbox.index + 1 < lightbox.images.length) onIndexChange(lightbox.index + 1);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightbox, onIndexChange]);
+  if (!image || !lightbox) return null;
+  const move = (index: number) => {
+    if (index < 0 || index >= lightbox.images.length) return;
+    reset();
+    onIndexChange(index);
   };
   return <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={image.alt} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="lightbox-toolbar"><button onClick={() => zoom(scale - .35)} aria-label="缩小图片">−</button><button onClick={() => { setScale(1); setPan({ x:0, y:0 }); }} aria-label="复位图片">↺</button><span>{Math.round(scale * 100)}%</span><button onClick={() => zoom(scale + .35)} aria-label="放大图片">＋</button><button onClick={onClose} aria-label="关闭全屏图片">×</button></div>
-    <div className={`lightbox-viewport ${scale > 1 ? 'is-zoomed' : ''}`}
-      onWheel={event => { event.preventDefault(); zoom(scale * Math.exp(-event.deltaY * .0012)); }}
-      onDoubleClick={() => zoom(scale > 1 ? 1 : 2.5)}
+    <div className="lightbox-toolbar"><button onClick={() => zoom(scaleRef.current - .35)} aria-label="缩小图片">−</button><button onClick={reset} aria-label="复位图片">↺</button><span>{Math.round(scale * 100)}%</span><button onClick={() => zoom(scaleRef.current + .35)} aria-label="放大图片">＋</button><button onClick={onClose} aria-label="关闭全屏图片">×</button></div>
+    {lightbox.images.length > 1 && <><button className="lightbox-nav previous" disabled={lightbox.index === 0} onClick={() => move(lightbox.index - 1)} aria-label="上一张">‹</button><button className="lightbox-nav next" disabled={lightbox.index + 1 === lightbox.images.length} onClick={() => move(lightbox.index + 1)} aria-label="下一张">›</button><div className="lightbox-caption"><strong><AutoScrollText>{image.alt}</AutoScrollText></strong><span>{lightbox.index + 1} / {lightbox.images.length}</span></div></>}
+    <div ref={viewport} className={`lightbox-viewport ${scale > 1 ? 'is-zoomed' : ''}`}
+      onDoubleClick={event => zoom(scaleRef.current > 1 ? 1 : 2.5, { x:event.clientX, y:event.clientY })}
       onPointerDown={event => {
         event.currentTarget.setPointerCapture(event.pointerId);
         pointers.current.set(event.pointerId, { x:event.clientX, y:event.clientY });
-        if (pointers.current.size === 1) dragStart.current = { x:event.clientX, y:event.clientY, panX:pan.x, panY:pan.y };
+        if (pointers.current.size === 1) dragStart.current = { x:event.clientX, y:event.clientY, panX:panRef.current.x, panY:panRef.current.y };
         if (pointers.current.size === 2) {
           const [a,b] = [...pointers.current.values()];
           pinchDistance.current = Math.hypot(a.x-b.x, a.y-b.y);
@@ -191,13 +258,18 @@ function ImageLightbox({ image, onClose }: { image: { src: string; alt: string }
         if (pointers.current.size === 2) {
           const [a,b] = [...pointers.current.values()];
           const distance = Math.hypot(a.x-b.x, a.y-b.y);
-          if (pinchDistance.current) zoom(scale * distance / pinchDistance.current);
+          if (pinchDistance.current) zoom(scaleRef.current * distance / pinchDistance.current, { x:(a.x+b.x)/2, y:(a.y+b.y)/2 });
           pinchDistance.current = distance;
-        } else if (scale > 1 && dragStart.current) {
-          setPan({ x:dragStart.current.panX + event.clientX - dragStart.current.x, y:dragStart.current.panY + event.clientY - dragStart.current.y });
+        } else if (scaleRef.current > 1 && dragStart.current) {
+          updatePan({ x:dragStart.current.panX + event.clientX - dragStart.current.x, y:dragStart.current.panY + event.clientY - dragStart.current.y });
         }
       }}
-      onPointerUp={event => { pointers.current.delete(event.pointerId); dragStart.current = null; pinchDistance.current = 0; }}
+      onPointerUp={event => {
+        pointers.current.delete(event.pointerId);
+        const remaining = [...pointers.current.values()][0];
+        dragStart.current = remaining ? { x:remaining.x, y:remaining.y, panX:panRef.current.x, panY:panRef.current.y } : null;
+        pinchDistance.current = 0;
+      }}
       onPointerCancel={event => { pointers.current.delete(event.pointerId); dragStart.current = null; pinchDistance.current = 0; }}>
       <img src={image.src} alt={image.alt} draggable={false} style={{ transform:`translate(${pan.x}px, ${pan.y}px) scale(${scale})` }} />
     </div>
@@ -265,7 +337,7 @@ function GraphCanvas({ graph, nodes, edges, media, fullscreen, onFullscreen, onC
         })}</svg>
         {nodes.map(node => { const position = layout.positions.get(node.id); return position && <article className="graph-node" key={node.id} style={{ left:position.x, top:position.y }}>
           {media.get(node.id) ? <img src={media.get(node.id)} alt=""/> : <i>{String(node.data.title || '?').slice(0,1)}</i>}
-          <strong>{node.data.title}</strong><span>{typeLabels[node.type]}</span>
+          <strong><AutoScrollText>{node.data.title}</AutoScrollText></strong><span>{typeLabels[node.type]}</span>
         </article>; })}
       </div>
     </div>
@@ -290,7 +362,7 @@ export default function Home() {
   const [sequenceOffset, setSequenceOffset] = useState(0);
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [graphId, setGraphId] = useState('');
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [copiedCardId, setCopiedCardId] = useState('');
@@ -397,6 +469,17 @@ export default function Home() {
   const graphMedia = new Map(graphNodes.map(node => [node.id, mediaUrl(node.type === 'temp_asset' ? node : assetsFor(node)[0])]));
   const ambient = chapterFilm ?? clip;
   const remainingShots = Math.max(shots.length - shotIndex, 1);
+
+  function openLightbox(collection: Item[], selected?: Item) {
+    const withImages = collection.filter(item => Boolean(item.data.file)).map(item => ({ id:item.id, src:mediaUrl(item), alt:String(item.data.title || '图片') }));
+    if (!withImages.length) return;
+    const index = Math.max(0, withImages.findIndex(item => item.id === selected?.id));
+    setLightbox({ images:withImages.map(({ src, alt }) => ({ src, alt })), index });
+  }
+
+  function openSingleLightbox(src: string, alt: string) {
+    setLightbox({ images:[{ src, alt }], index:0 });
+  }
 
   async function copyHarnessTask(item: Item) {
     const scope = item.type === 'chapter' ? '章节' : '段落';
@@ -505,13 +588,13 @@ export default function Home() {
     <section className="inspiration-shell">
       <aside className="inspiration-categories">
         <header><span>分类</span><b>{allInspirations.length}</b></header>
-        <button className={inspirationCategoryId === 'all' ? 'active' : ''} onClick={() => { setInspirationCategoryId('all'); setInspirationSubcategoryId('all'); setInspirationTag(''); setInspirationId(''); }}><strong>全部</strong><span>{allInspirations.length}</span></button>
+        <button className={inspirationCategoryId === 'all' ? 'active' : ''} onClick={() => { setInspirationCategoryId('all'); setInspirationSubcategoryId('all'); setInspirationTag(''); setInspirationId(''); }}><strong><AutoScrollText>全部</AutoScrollText></strong><span>{allInspirations.length}</span></button>
         {inspirationCategories.map(category => <div className="inspiration-category-group" key={category.id}>
           <button className={inspirationCategoryId === category.id && inspirationSubcategoryId === 'all' ? 'active' : ''} onClick={() => { setInspirationCategoryId(category.id); setInspirationSubcategoryId('all'); setInspirationTag(''); setInspirationId(''); }}>
-            <strong>{category.data.title}</strong><span>{allInspirations.filter(item => categoryIdForInspiration(item) === category.id).length}</span>
+            <strong><AutoScrollText>{category.data.title}</AutoScrollText></strong><span>{allInspirations.filter(item => categoryIdForInspiration(item) === category.id).length}</span>
           </button>
           {inspirationCategoryId === category.id && inspirationSubcategories.filter(item => item.parent === category.id).map(subcategory => <button className={`inspiration-subcategory ${inspirationSubcategoryId === subcategory.id ? 'active' : ''}`} key={subcategory.id} onClick={() => { setInspirationSubcategoryId(subcategory.id); setInspirationTag(''); setInspirationId(''); }}>
-            <strong>{subcategory.data.title}</strong><span>{allInspirations.filter(item => item.parent === subcategory.id).length}</span>
+            <strong><AutoScrollText>{subcategory.data.title}</AutoScrollText></strong><span>{allInspirations.filter(item => item.parent === subcategory.id).length}</span>
           </button>)}
         </div>)}
       </aside>
@@ -524,9 +607,9 @@ export default function Home() {
         <div className={`inspiration-grid ${inspirations.length ? '' : 'is-empty'}`}>
           {!inspirations.length && <div className="paste-hint"><kbd>⌘ V</kbd><strong>把喜欢的画面贴进来</strong><span>也支持 Ctrl V 或选择本地图片</span></div>}
           {inspirations.map(item => <article key={item.id} className={`inspiration-card ${selectedInspiration?.id === item.id ? 'active' : ''}`}>
-            <button className="inspiration-select" onClick={() => setInspirationId(item.id)} onDoubleClick={() => setLightbox({ src:mediaUrl(item), alt:String(item.data.title) })}>
+            <button className="inspiration-select" onClick={() => setInspirationId(item.id)} onDoubleClick={() => openLightbox(inspirations, item)}>
               <img src={mediaUrl(item)} alt={String(item.data.title || '')} />
-              <span><strong>{item.data.title}</strong><em>{[...(item.data.types || []), ...(item.data.tags || [])].map(tag => `#${tag}`).join(' ') || '等待整理'}</em></span>
+              <span><strong><AutoScrollText>{item.data.title}</AutoScrollText></strong><em><AutoScrollText>{[...(item.data.types || []), ...(item.data.tags || [])].map(tag => `#${tag}`).join(' ') || '等待整理'}</AutoScrollText></em></span>
             </button>
             <button className="copy-path" onClick={() => copyAssetPath(item)} aria-label={`复制${item.data.title}的文件位置`} title="复制名称与文件位置"><CopyIcon copied={copiedCardId === item.id} /></button>
           </article>)}
@@ -534,7 +617,7 @@ export default function Home() {
       </div>
       <aside className="inspiration-inspector">
         {selectedInspiration ? <>
-          <button className="inspector-image" onClick={() => setLightbox({ src:mediaUrl(selectedInspiration), alt:String(selectedInspiration.data.title) })} aria-label="全屏查看灵感图片"><img src={mediaUrl(selectedInspiration)} alt="" /></button>
+          <button className="inspector-image" onClick={() => openLightbox(inspirations, selectedInspiration)} aria-label="全屏查看灵感图片"><img src={mediaUrl(selectedInspiration)} alt="" /></button>
           <h2>{selectedInspiration.data.title}</h2>
           <p>{[inspirationCategories.find(item => item.id === categoryIdForInspiration(selectedInspiration))?.data.title, subcategoryById.get(String(selectedInspiration.parent))?.data.title].filter(Boolean).join(' / ') || '尚未归类'}</p>
           <div>{[...(selectedInspiration.data.types || []), ...(selectedInspiration.data.tags || [])].map(tag => <span key={tag}>#{tag}</span>)}</div>
@@ -559,7 +642,7 @@ export default function Home() {
         </form>
       </section>
     </div>}
-    <ImageLightbox key={lightbox?.src || 'closed'} image={lightbox} onClose={() => setLightbox(null)} />
+    <ImageLightbox key={lightbox?.images[lightbox.index]?.src || 'closed'} lightbox={lightbox} onIndexChange={index => setLightbox(current => current ? { ...current, index } : current)} onClose={() => setLightbox(null)} />
     <DocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
   </main>;
 
@@ -603,18 +686,18 @@ export default function Home() {
             <div className="entity-list asset-list">{worldItems.map(item => { const thumbnail = thumbnailFor(item); return <article key={item.id} className={`entity-card ${entity?.id === item.id ? 'active' : ''}`}>
               <button className="entity-card-select" onClick={() => { setEntityId(item.id); setAssetIndex(0); }}>
                 <MediaThumb item={thumbnail} />
-                <span><strong>{item.data.title}</strong></span>
+                <span><strong><AutoScrollText>{item.data.title}</AutoScrollText></strong></span>
               </button>
               {thumbnail?.data.file && <button className="copy-path" onClick={() => copyAssetPath(thumbnail)} aria-label={`复制${thumbnail.data.title}的文件位置`} title="复制名称与文件位置"><CopyIcon copied={copiedCardId === thumbnail.id} /></button>}
             </article>; })}</div>
           </div>
           <div className="book-seam" />
           <div className="glass-page asset-page">
-            {entity && entity.type === 'temp_asset' ? <><h1>{entity.data.title}</h1><TempPreview item={entity} onZoom={(src, alt) => setLightbox({ src, alt })} /></> : entity && <>
+            {entity && entity.type === 'temp_asset' ? <><h1>{entity.data.title}</h1><TempPreview item={entity} onZoom={openSingleLightbox} /></> : entity && <>
               <h1>{entity.data.title}</h1>
               {entityAssets.length > 0 ? <>
                 <div className="asset-switcher">{entityAssets.map((asset, index) => <button key={asset.id} className={assetIndex === index ? 'active' : ''} onClick={() => setAssetIndex(index)}>{asset.data.title}</button>)}</div>
-                <figure className="entity-visual"><button className="zoomable-media" onClick={() => setLightbox({ src: mediaUrl(entityAsset), alt: String(entityAsset?.data.title || entity.data.title) })} aria-label="全屏查看图片"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /></button><figcaption>{entityAsset?.data.title}</figcaption></figure>
+                <figure className="entity-visual"><button className="zoomable-media" onClick={() => openLightbox(entityAssets, entityAsset)} aria-label="全屏查看图片"><img src={mediaUrl(entityAsset)} alt={String(entityAsset?.data.title || entity.data.title)} /></button><figcaption>{entityAsset?.data.title}</figcaption></figure>
               </> : <div className="text-asset"><p>{entity.data.design}</p></div>}
             </>}
           </div>
@@ -622,7 +705,7 @@ export default function Home() {
           <div className="glass-page entity-page relation-index">
             <div className="entity-list graph-list">{relationGraphs.map(item => <button key={item.id} className={relationGraph?.id === item.id ? 'active' : ''} onClick={() => setGraphId(item.id)}>
               <i className="graph-thumb"><b>{String(item.data.title || '').startsWith('角色') ? '人' : '盟'}</b><span><em/><em/><em/></span></i>
-              <span><strong>{item.data.title}</strong></span>
+              <span><strong><AutoScrollText>{item.data.title}</AutoScrollText></strong></span>
             </button>)}</div>
           </div>
           <div className="book-seam" />
@@ -671,7 +754,7 @@ export default function Home() {
         </>}
       </>}
     </section>
-    <ImageLightbox key={lightbox?.src || 'closed'} image={lightbox} onClose={() => setLightbox(null)} />
+    <ImageLightbox key={lightbox?.images[lightbox.index]?.src || 'closed'} lightbox={lightbox} onIndexChange={index => setLightbox(current => current ? { ...current, index } : current)} onClose={() => setLightbox(null)} />
     {graphFullscreen && relationGraph && <div className="graph-fullscreen" role="dialog" aria-modal="true" aria-label={String(relationGraph.data.title)} onMouseDown={event => { if (event.target === event.currentTarget) setGraphFullscreen(false); }}>
       <GraphCanvas graph={relationGraph} nodes={graphNodes} edges={graphEdges} media={graphMedia} fullscreen onClose={() => setGraphFullscreen(false)} />
     </div>}
