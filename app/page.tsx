@@ -496,11 +496,14 @@ export default function Home() {
     <div className="home-wash" />
     <header className="home-header">
       <div className="wordmark"><span>BOOKMONTAGE</span><i>#</i><strong>书间</strong></div>
-      <div className="home-actions"><button className="inspiration-entry" onClick={() => setView('inspiration')}><span>▧</span> 灵感库</button><DocsButton onClick={() => setDocsOpen(true)} /></div>
+      <DocsButton onClick={() => setDocsOpen(true)} />
     </header>
     <section className="bookshelf" aria-label="书架">
       <div className="shelf-lines" aria-hidden="true"><i/><i/><i/></div>
-      <div className="book-grid">{books.map(item => { const itemCover = items.find(candidate => candidate.id === item.data.cover); return <button key={item.id} className="book-card" onClick={() => openBook(item)} aria-label={`打开《${item.data.title}》`}>
+      <div className="book-grid"><button className="book-card inspiration-book" onClick={() => setView('inspiration')} aria-label="打开灵感库">
+        <span className="inspiration-cover">{allInspirations.slice(0, 6).map(item => <img key={item.id} src={mediaUrl(item)} alt="" />)}{!allInspirations.length && <i><b>灵</b><em>INSPIRATION</em></i>}</span>
+        <span className="book-card-glass"><strong>灵感库</strong><em>{allInspirations.length ? `${inspirationCategories.length} 个分类 · ${allInspirations.length} 张藏图` : '把世界的碎片收进来'}</em></span>
+      </button>{books.map(item => { const itemCover = items.find(candidate => candidate.id === item.data.cover); return <button key={item.id} className="book-card" onClick={() => openBook(item)} aria-label={`打开《${item.data.title}》`}>
         <img src={mediaUrl(itemCover)} alt="" />
         <span className="book-card-glass"><strong>{item.data.title}</strong><em>{item.data.subtitle}</em></span>
       </button>; })}</div>
