@@ -469,7 +469,11 @@ export default function Home() {
   const selectedInspirationId = selectedInspiration?.id;
   useEffect(() => {
     if (view !== 'inspiration' || !selectedInspirationId) return;
-    inspirationInspector.current?.scrollTo({ top:0, left:0 });
+    const inspector = inspirationInspector.current;
+    if (!inspector) return;
+    inspector.scrollTop = 0;
+    const frame = requestAnimationFrame(() => { inspector.scrollTop = 0; });
+    return () => cancelAnimationFrame(frame);
   }, [selectedInspirationId, view]);
   const book = books.find(item => item.id === selectedBookId) ?? books[0];
   const chapters = items.filter(item => item.type === 'chapter' && item.parent === book?.id);
@@ -646,7 +650,7 @@ export default function Home() {
         <div className={`inspiration-grid ${inspirations.length ? '' : 'is-empty'}`}>
           {!inspirations.length && <div className="paste-hint"><kbd>⌘ V</kbd><strong>把喜欢的画面贴进来</strong><span>也支持 Ctrl V 或选择本地图片</span></div>}
           {inspirations.map(item => <article key={item.id} className={`inspiration-card ${selectedInspiration?.id === item.id ? 'active' : ''}`}>
-            <button className="inspiration-select" onClick={() => setInspirationId(item.id)} onDoubleClick={() => openLightbox(inspirations, item)}>
+            <button className="inspiration-select" onClick={() => { inspirationInspector.current?.scrollTo({ top:0, left:0 }); setInspirationId(item.id); }} onDoubleClick={() => openLightbox(inspirations, item)}>
               <img src={mediaUrl(item)} alt={String(item.data.title || '')} />
               <span><strong><AutoScrollText>{item.data.title}</AutoScrollText></strong><em><AutoScrollText>{[...(item.data.types || []), ...(item.data.tags || [])].map(tag => `#${tag}`).join(' ') || '等待整理'}</AutoScrollText></em></span>
             </button>
