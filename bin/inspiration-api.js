@@ -47,7 +47,10 @@ const server = createServer(async (request, response) => {
         dataUrl:body.data_url,
         title:body.title,
         category:body.category,
+        subcategory:body.subcategory,
+        types:Array.isArray(body.types) ? body.types : [],
         tags:Array.isArray(body.tags) ? body.tags : [],
+        detailed_description:body.detailed_description,
       });
       const snapshotFile = exportSnapshot();
       return send(response, 201, { item, snapshot:JSON.parse(readFileSync(snapshotFile, 'utf8')) }, origin);

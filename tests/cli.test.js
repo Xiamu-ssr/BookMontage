@@ -84,6 +84,7 @@ test('help exposes the Seedance example search command', () => {
   assert.match(run(home, 'help'), /source-search \[keywords\]/);
   assert.match(run(home, 'help'), /--source all\|meigen\|wallhaven/);
   assert.match(run(home, 'help'), /inspiration-import <image>/);
+  assert.match(run(home, 'help'), /inspiration-update <asset>/);
   assert.match(run(home, 'help'), /inspiration-adopt <asset>/);
 });
 
@@ -160,4 +161,26 @@ test('the global inspiration library classifies images and derives book assets w
   assert.match(run(home, 'links', 'cloud-palace'), new RegExp(`out\\tdepends\\t${adopted.id}`));
   assert.match(run(home, 'links', adopted.id), new RegExp(`out\\tderived_from\\t${inspiration.id}`));
   assert.deepEqual(JSON.parse(run(home, 'verify')).errors, []);
+});
+
+test('inspiration metadata supports optional two-level classification and versioned reverse prompts', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bookmontage-inspiration-metadata-'));
+  const imageFile = join(home, 'portrait.png');
+  const descriptionFile = join(home, 'description.txt');
+  writeFileSync(imageFile, Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
+  writeFileSync(descriptionFile, '黑发绿眼女性，穿层叠黑纱长裙，侧光突出金属饰品。');
+  const loose = JSON.parse(run(home, 'inspiration-import', imageFile, '--title', '待整理'));
+  assert.equal(loose.parent, null);
+  assert.deepEqual(JSON.parse(run(home, 'inspiration-list')).categories, []);
+  const revised = JSON.parse(run(home, 'inspiration-update', loose.id,
+    '--category', 'WLOP', '--subcategory', '翠眸角色', '--title', '黑纱肖像',
+    '--types', '角色', '--tags', '绿眼,黑纱', '--description-file', descriptionFile));
+  assert.match(revised.id, /0002$/);
+  assert.deepEqual(revised.data.types, ['角色']);
+  assert.equal(revised.data.detailed_description, '黑发绿眼女性，穿层叠黑纱长裙，侧光突出金属饰品。');
+  const catalog = JSON.parse(run(home, 'inspiration-list', '--category', 'wlop', '--subcategory', '翠眸', '--type', '角色'));
+  assert.equal(catalog.categories[0].title, 'WLOP');
+  assert.equal(catalog.subcategories[0].title, '翠眸角色');
+  assert.equal(catalog.assets.length, 1);
+  assert.equal(catalog.assets[0].title, '黑纱肖像');
 });

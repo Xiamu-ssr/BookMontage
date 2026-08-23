@@ -19,7 +19,7 @@ SQLite 是唯一事实源。不要手改 `public/generated/library.json`，它�
 
 网络调研素材放进“临时素材”，不要伪装成正式角色资产。使用 `stash <url> --title <名称> --source <来源页面>` 下载到 `.bookmontage/tmp`；图片、GIF、视频和文档都可保存。确认采用后再生成正式 `asset`，并用 `derived_from` 指回临时素材。
 
-“灵感库”跨越所有书籍，用于保存人类手动截图或粘贴的私人视觉参考。图片存于 `.bookmontage/inspirations`，一级分类使用 `inspiration_category`，图片使用 `inspiration_asset`，标签只放在图片的 `tags` 数组。可在本地页面直接 ⌘V/Ctrl+V，也可用 `inspiration-import <图片> --category <分类> --title <标题> --tags <a,b>`。需要正式采用时，用 `inspiration-adopt <灵感图> --target <角色或地图>` 派生新的书内 `asset`；新资产用 `derived_from` 指回灵感图，禁止覆盖或复制元数据。
+“灵感库”跨越所有书籍，用于保存人类手动截图或粘贴的私人视觉参考。图片只存一份于 `.bookmontage/inspirations`；一级来源/合集使用 `inspiration_category`，二级角色或场景组使用 `inspiration_subcategory`，图片使用 `inspiration_asset`。Harness 接手新图后必须逐张观察并补齐标题、二级分类、可选类型标签、普通标签与反向提示词式 `detailed_description`；具体规则见[灵感库维护手册](references/inspiration-library.md)。需要正式采用时，用 `inspiration-adopt <灵感图> --target <角色或地图>` 派生新的书内 `asset`；新资产用 `derived_from` 指回灵感图，禁止覆盖或复制元数据。
 
 构思角色、场景或镜头前，先用 `source-list` 查看可用图像来源，再用 `source-search [关键词] --source <meigen|wallhaven>` 检索。结果只返回标题、图片链接、原页面、提示词和热度等元数据，不会自动写入项目。Harness 必须先审视结果；只有决定保留时，才把结果中的 `stash.url` 交给 `stash`。默认把图片当视觉参考，不默认拥有复制、训练或商用权利。
 

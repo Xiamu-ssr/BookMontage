@@ -1,14 +1,14 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- local mutable assets should not enter an image optimizer cache */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type ItemData = Record<string, unknown> & {
   title?: string; slug?: string; path?: string; subtitle?: string; summary?: string;
   story?: string; draft?: string; body?: string; file?: string; design?: string;
   voice?: string; role?: string; duration?: number; model?: string; status?: string; cover?: string;
   mime?: string; media_type?: string; source_url?: string; source_page?: string; note?: string;
-  types?: string[]; nodes?: string[]; kinds?: string[]; tags?: string[]; created_at?: string; copyright_sensitive?: boolean;
+  types?: string[]; nodes?: string[]; kinds?: string[]; tags?: string[]; detailed_description?: string; created_at?: string; copyright_sensitive?: boolean;
 };
 type Item = { id: string; type: string; parent: string | null; data: ItemData };
 type Link = { source: string; target: string; kind: string };
@@ -29,6 +29,7 @@ const docs = [
   { id: 'seedance20', title: 'Seedance 2.0', file: '/docs/seedance-2.0.md' },
   { id: 'minimax', title: 'MiniMax H3', file: '/docs/minimax-h3.md' },
   { id: 'prompt-libraries', title: '创作数据源', file: '/docs/prompt-libraries.md' },
+  { id: 'inspiration-library', title: '灵感库维护手册', file: '/docs/inspiration-library.md' },
 ];
 
 const worldTabs: { id: WorldTab; title: string }[] = [
@@ -157,6 +158,52 @@ function DocsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   </div>;
 }
 
+function ImageLightbox({ image, onClose }: { image: { src: string; alt: string } | null; onClose: () => void }) {
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x:0, y:0 });
+  const pointers = useRef(new Map<number, { x:number; y:number }>());
+  const dragStart = useRef<{ x:number; y:number; panX:number; panY:number } | null>(null);
+  const pinchDistance = useRef(0);
+  if (!image) return null;
+  const clampScale = (value: number) => Math.min(8, Math.max(1, value));
+  const zoom = (next: number) => {
+    const value = clampScale(next);
+    setScale(value);
+    if (value === 1) setPan({ x:0, y:0 });
+  };
+  return <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={image.alt} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="lightbox-toolbar"><button onClick={() => zoom(scale - .35)} aria-label="缩小图片">−</button><button onClick={() => { setScale(1); setPan({ x:0, y:0 }); }} aria-label="复位图片">↺</button><span>{Math.round(scale * 100)}%</span><button onClick={() => zoom(scale + .35)} aria-label="放大图片">＋</button><button onClick={onClose} aria-label="关闭全屏图片">×</button></div>
+    <div className={`lightbox-viewport ${scale > 1 ? 'is-zoomed' : ''}`}
+      onWheel={event => { event.preventDefault(); zoom(scale * Math.exp(-event.deltaY * .0012)); }}
+      onDoubleClick={() => zoom(scale > 1 ? 1 : 2.5)}
+      onPointerDown={event => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        pointers.current.set(event.pointerId, { x:event.clientX, y:event.clientY });
+        if (pointers.current.size === 1) dragStart.current = { x:event.clientX, y:event.clientY, panX:pan.x, panY:pan.y };
+        if (pointers.current.size === 2) {
+          const [a,b] = [...pointers.current.values()];
+          pinchDistance.current = Math.hypot(a.x-b.x, a.y-b.y);
+        }
+      }}
+      onPointerMove={event => {
+        if (!pointers.current.has(event.pointerId)) return;
+        pointers.current.set(event.pointerId, { x:event.clientX, y:event.clientY });
+        if (pointers.current.size === 2) {
+          const [a,b] = [...pointers.current.values()];
+          const distance = Math.hypot(a.x-b.x, a.y-b.y);
+          if (pinchDistance.current) zoom(scale * distance / pinchDistance.current);
+          pinchDistance.current = distance;
+        } else if (scale > 1 && dragStart.current) {
+          setPan({ x:dragStart.current.panX + event.clientX - dragStart.current.x, y:dragStart.current.panY + event.clientY - dragStart.current.y });
+        }
+      }}
+      onPointerUp={event => { pointers.current.delete(event.pointerId); dragStart.current = null; pinchDistance.current = 0; }}
+      onPointerCancel={event => { pointers.current.delete(event.pointerId); dragStart.current = null; pinchDistance.current = 0; }}>
+      <img src={image.src} alt={image.alt} draggable={false} style={{ transform:`translate(${pan.x}px, ${pan.y}px) scale(${scale})` }} />
+    </div>
+  </div>;
+}
+
 function GraphCanvas({ graph, nodes, edges, media, fullscreen, onFullscreen, onClose }: {
   graph: Item; nodes: Item[]; edges: GraphEdge[]; media: Map<string, string>;
   fullscreen?: boolean; onFullscreen?: () => void; onClose?: () => void;
@@ -248,9 +295,10 @@ export default function Home() {
   const [graphFullscreen, setGraphFullscreen] = useState(false);
   const [copiedCardId, setCopiedCardId] = useState('');
   const [inspirationCategoryId, setInspirationCategoryId] = useState('all');
+  const [inspirationSubcategoryId, setInspirationSubcategoryId] = useState('all');
   const [inspirationTag, setInspirationTag] = useState('');
   const [inspirationId, setInspirationId] = useState('');
-  const [pasteDraft, setPasteDraft] = useState<{ dataUrl: string; title: string; category: string; tags: string } | null>(null);
+  const [pasteDraft, setPasteDraft] = useState<{ dataUrl: string; title: string; category: string; subcategory: string; types: string[]; tags: string; detailedDescription: string } | null>(null);
   const [inspirationNotice, setInspirationNotice] = useState('');
   const [inspirationSaving, setInspirationSaving] = useState(false);
 
@@ -284,13 +332,15 @@ export default function Home() {
       const image = [...(event.clipboardData?.items ?? [])].find(item => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
       if (!image) return;
       event.preventDefault();
+      const activeSubcategory = library?.items.find(item => item.id === inspirationSubcategoryId && item.type === 'inspiration_subcategory');
+      const activeCategory = library?.items.find(item => item.id === (activeSubcategory?.parent || inspirationCategoryId) && item.type === 'inspiration_category');
       const reader = new FileReader();
-      reader.onload = () => setPasteDraft({ dataUrl:String(reader.result), title:'未命名灵感', category:'未分类', tags:'' });
+      reader.onload = () => setPasteDraft({ dataUrl:String(reader.result), title:'未命名灵感', category:String(activeCategory?.data.title || ''), subcategory:String(activeSubcategory?.data.title || ''), types:[], tags:'', detailedDescription:'' });
       reader.readAsDataURL(image);
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [view]);
+  }, [inspirationCategoryId, inspirationSubcategoryId, library, view]);
 
   const items = useMemo(() => {
     const latest = new Map<string, Item>();
@@ -301,9 +351,13 @@ export default function Home() {
   const itemByLogicalId = (id: string) => items.find(item => item.id.slice(0, -4) === id.slice(0, -4));
   const books = items.filter(item => item.type === 'book');
   const inspirationCategories = items.filter(item => item.type === 'inspiration_category');
+  const inspirationSubcategories = items.filter(item => item.type === 'inspiration_subcategory');
   const allInspirations = items.filter(item => item.type === 'inspiration_asset');
+  const subcategoryById = new Map(inspirationSubcategories.map(item => [item.id, item]));
+  const categoryIdForInspiration = (item: Item) => subcategoryById.get(String(item.parent))?.parent || item.parent;
   const inspirationTags = [...new Set(allInspirations.flatMap(item => item.data.tags ?? []))].sort((left, right) => left.localeCompare(right, 'zh-CN'));
-  const inspirations = allInspirations.filter(item => (inspirationCategoryId === 'all' || item.parent === inspirationCategoryId)
+  const inspirations = allInspirations.filter(item => (inspirationCategoryId === 'all' || categoryIdForInspiration(item) === inspirationCategoryId)
+    && (inspirationSubcategoryId === 'all' || item.parent === inspirationSubcategoryId)
     && (!inspirationTag || item.data.tags?.includes(inspirationTag)));
   const selectedInspiration = inspirations.find(item => item.id === inspirationId) ?? inspirations[0];
   const book = books.find(item => item.id === selectedBookId) ?? books[0];
@@ -364,11 +418,16 @@ export default function Home() {
   function draftImage(file?: File | null) {
     if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
+    const activeSubcategory = inspirationSubcategories.find(item => item.id === inspirationSubcategoryId);
+    const activeCategory = inspirationCategories.find(item => item.id === (activeSubcategory?.parent || inspirationCategoryId));
     reader.onload = () => setPasteDraft({
       dataUrl:String(reader.result),
       title:file.name.replace(/\.[^.]+$/, '') || '未命名灵感',
-      category:String(inspirationCategories.find(item => item.id === inspirationCategoryId)?.data.title || '未分类'),
+      category:String(activeCategory?.data.title || ''),
+      subcategory:String(activeSubcategory?.data.title || ''),
+      types:[],
       tags:'',
+      detailedDescription:'',
     });
     reader.readAsDataURL(file);
   }
@@ -385,13 +444,18 @@ export default function Home() {
           data_url:pasteDraft.dataUrl,
           title:pasteDraft.title,
           category:pasteDraft.category,
+          subcategory:pasteDraft.subcategory,
+          types:pasteDraft.types,
           tags:pasteDraft.tags.split(/[,，]/).map(tag => tag.trim()).filter(Boolean),
+          detailed_description:pasteDraft.detailedDescription,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
       setLibrary(result.snapshot);
-      setInspirationCategoryId(result.item.parent);
+      const savedSubcategory = result.snapshot.items.find((item: Item) => item.type === 'inspiration_subcategory' && item.id === result.item.parent);
+      setInspirationCategoryId(savedSubcategory?.parent || result.item.parent || 'all');
+      setInspirationSubcategoryId(savedSubcategory?.id || 'all');
       setInspirationId(result.item.id);
       setPasteDraft(null);
       setInspirationNotice('已存入私人灵感库');
@@ -441,14 +505,19 @@ export default function Home() {
     <section className="inspiration-shell">
       <aside className="inspiration-categories">
         <header><span>分类</span><b>{allInspirations.length}</b></header>
-        <button className={inspirationCategoryId === 'all' ? 'active' : ''} onClick={() => { setInspirationCategoryId('all'); setInspirationTag(''); setInspirationId(''); }}><strong>全部</strong><span>{allInspirations.length}</span></button>
-        {inspirationCategories.map(category => <button key={category.id} className={inspirationCategoryId === category.id ? 'active' : ''} onClick={() => { setInspirationCategoryId(category.id); setInspirationTag(''); setInspirationId(''); }}>
-          <strong>{category.data.title}</strong><span>{allInspirations.filter(item => item.parent === category.id).length}</span>
-        </button>)}
+        <button className={inspirationCategoryId === 'all' ? 'active' : ''} onClick={() => { setInspirationCategoryId('all'); setInspirationSubcategoryId('all'); setInspirationTag(''); setInspirationId(''); }}><strong>全部</strong><span>{allInspirations.length}</span></button>
+        {inspirationCategories.map(category => <div className="inspiration-category-group" key={category.id}>
+          <button className={inspirationCategoryId === category.id && inspirationSubcategoryId === 'all' ? 'active' : ''} onClick={() => { setInspirationCategoryId(category.id); setInspirationSubcategoryId('all'); setInspirationTag(''); setInspirationId(''); }}>
+            <strong>{category.data.title}</strong><span>{allInspirations.filter(item => categoryIdForInspiration(item) === category.id).length}</span>
+          </button>
+          {inspirationCategoryId === category.id && inspirationSubcategories.filter(item => item.parent === category.id).map(subcategory => <button className={`inspiration-subcategory ${inspirationSubcategoryId === subcategory.id ? 'active' : ''}`} key={subcategory.id} onClick={() => { setInspirationSubcategoryId(subcategory.id); setInspirationTag(''); setInspirationId(''); }}>
+            <strong>{subcategory.data.title}</strong><span>{allInspirations.filter(item => item.parent === subcategory.id).length}</span>
+          </button>)}
+        </div>)}
       </aside>
       <div className="inspiration-catalog">
         <header className="inspiration-toolbar">
-          <div><h1>{inspirationCategoryId === 'all' ? '全部灵感' : inspirationCategories.find(item => item.id === inspirationCategoryId)?.data.title}</h1><p>粘贴截图，写下标题，剩下的交给 Harness 整理。</p></div>
+          <div><h1>{inspirationSubcategoryId !== 'all' ? inspirationSubcategories.find(item => item.id === inspirationSubcategoryId)?.data.title : inspirationCategoryId === 'all' ? '全部灵感' : inspirationCategories.find(item => item.id === inspirationCategoryId)?.data.title}</h1><p>粘贴截图，写下标题，剩下的交给 Harness 整理。</p></div>
           <label className="file-pick">选择图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={event => draftImage(event.target.files?.[0])} /></label>
         </header>
         {inspirationTags.length > 0 && <nav className="inspiration-tags" aria-label="标签筛选"><button className={!inspirationTag ? 'active' : ''} onClick={() => setInspirationTag('')}>全部标签</button>{inspirationTags.map(tag => <button key={tag} className={inspirationTag === tag ? 'active' : ''} onClick={() => setInspirationTag(tag)}>#{tag}</button>)}</nav>}
@@ -457,7 +526,7 @@ export default function Home() {
           {inspirations.map(item => <article key={item.id} className={`inspiration-card ${selectedInspiration?.id === item.id ? 'active' : ''}`}>
             <button className="inspiration-select" onClick={() => setInspirationId(item.id)} onDoubleClick={() => setLightbox({ src:mediaUrl(item), alt:String(item.data.title) })}>
               <img src={mediaUrl(item)} alt={String(item.data.title || '')} />
-              <span><strong>{item.data.title}</strong><em>{item.data.tags?.map(tag => `#${tag}`).join(' ') || '未加标签'}</em></span>
+              <span><strong>{item.data.title}</strong><em>{[...(item.data.types || []), ...(item.data.tags || [])].map(tag => `#${tag}`).join(' ') || '等待整理'}</em></span>
             </button>
             <button className="copy-path" onClick={() => copyAssetPath(item)} aria-label={`复制${item.data.title}的文件位置`} title="复制名称与文件位置"><CopyIcon copied={copiedCardId === item.id} /></button>
           </article>)}
@@ -467,8 +536,9 @@ export default function Home() {
         {selectedInspiration ? <>
           <button className="inspector-image" onClick={() => setLightbox({ src:mediaUrl(selectedInspiration), alt:String(selectedInspiration.data.title) })} aria-label="全屏查看灵感图片"><img src={mediaUrl(selectedInspiration)} alt="" /></button>
           <h2>{selectedInspiration.data.title}</h2>
-          <p>{inspirationCategories.find(item => item.id === selectedInspiration.parent)?.data.title || '未分类'}</p>
-          <div>{selectedInspiration.data.tags?.map(tag => <span key={tag}>#{tag}</span>)}</div>
+          <p>{[inspirationCategories.find(item => item.id === categoryIdForInspiration(selectedInspiration))?.data.title, subcategoryById.get(String(selectedInspiration.parent))?.data.title].filter(Boolean).join(' / ') || '尚未归类'}</p>
+          <div>{[...(selectedInspiration.data.types || []), ...(selectedInspiration.data.tags || [])].map(tag => <span key={tag}>#{tag}</span>)}</div>
+          <section className="inspiration-description"><strong>详细描述</strong><p>{selectedInspiration.data.detailed_description || '等待 Harness 逐图补全。'}</p></section>
           <button className="copy-inspiration" onClick={() => copyAssetPath(selectedInspiration)}><CopyIcon copied={copiedCardId === selectedInspiration.id} /> 复制给 Harness</button>
         </> : <div className="inspector-empty"><span>灵</span><p>选中一张图片查看</p></div>}
       </aside>
@@ -480,14 +550,16 @@ export default function Home() {
         <form onSubmit={event => { event.preventDefault(); savePasteDraft(); }}>
           <span>存入灵感库</span>
           <label>标题<input autoFocus value={pasteDraft.title} onChange={event => setPasteDraft({ ...pasteDraft, title:event.target.value })} /></label>
-          <label>一级分类<input list="inspiration-category-options" value={pasteDraft.category} onChange={event => setPasteDraft({ ...pasteDraft, category:event.target.value })} /></label>
-          <datalist id="inspiration-category-options">{inspirationCategories.map(category => <option key={category.id} value={String(category.data.title)} />)}</datalist>
+          <label>一级分类<select value={pasteDraft.category} onChange={event => setPasteDraft({ ...pasteDraft, category:event.target.value, subcategory:'' })}><option value="">选择一级分类</option>{inspirationCategories.map(category => <option key={category.id} value={String(category.data.title)}>{category.data.title}</option>)}</select></label>
+          <label>二级分类<select value={pasteDraft.subcategory} disabled={!pasteDraft.category} onChange={event => setPasteDraft({ ...pasteDraft, subcategory:event.target.value })}><option value="">选择二级分类</option>{inspirationSubcategories.filter(subcategory => inspirationCategories.find(category => category.id === subcategory.parent)?.data.title === pasteDraft.category).map(subcategory => <option key={subcategory.id} value={String(subcategory.data.title)}>{subcategory.data.title}</option>)}</select></label>
+          <fieldset className="inspiration-type-picker"><legend>类型标签（可多选）</legend>{['角色','场景'].map(type => <button type="button" key={type} className={pasteDraft.types.includes(type) ? 'active' : ''} onClick={() => setPasteDraft({ ...pasteDraft, types:pasteDraft.types.includes(type) ? pasteDraft.types.filter(value => value !== type) : [...pasteDraft.types, type] })}>{type}</button>)}</fieldset>
           <label>标签<input value={pasteDraft.tags} onChange={event => setPasteDraft({ ...pasteDraft, tags:event.target.value })} placeholder="仙侠，天宫，云海" /></label>
+          <label>详细描述<textarea value={pasteDraft.detailedDescription} onChange={event => setPasteDraft({ ...pasteDraft, detailedDescription:event.target.value })} placeholder="可留空，由 Harness 观察图片后补全反向提示词式描述。" /></label>
           <footer><button type="button" onClick={() => setPasteDraft(null)}>取消</button><button className="save-inspiration" disabled={inspirationSaving || !pasteDraft.title.trim()}>{inspirationSaving ? '正在保存' : '保存'}</button></footer>
         </form>
       </section>
     </div>}
-    {lightbox && <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.alt} onMouseDown={event => { if (event.target === event.currentTarget) setLightbox(null); }}><button className="lightbox-close" onClick={() => setLightbox(null)} aria-label="关闭全屏图片">×</button><img src={lightbox.src} alt={lightbox.alt} /></div>}
+    <ImageLightbox key={lightbox?.src || 'closed'} image={lightbox} onClose={() => setLightbox(null)} />
     <DocsDrawer open={docsOpen} onClose={() => setDocsOpen(false)} />
   </main>;
 
@@ -599,10 +671,7 @@ export default function Home() {
         </>}
       </>}
     </section>
-    {lightbox && <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.alt} onMouseDown={event => { if (event.target === event.currentTarget) setLightbox(null); }}>
-      <button className="lightbox-close" onClick={() => setLightbox(null)} aria-label="关闭全屏图片">×</button>
-      <img src={lightbox.src} alt={lightbox.alt} />
-    </div>}
+    <ImageLightbox key={lightbox?.src || 'closed'} image={lightbox} onClose={() => setLightbox(null)} />
     {graphFullscreen && relationGraph && <div className="graph-fullscreen" role="dialog" aria-modal="true" aria-label={String(relationGraph.data.title)} onMouseDown={event => { if (event.target === event.currentTarget) setGraphFullscreen(false); }}>
       <GraphCanvas graph={relationGraph} nodes={graphNodes} edges={graphEdges} media={graphMedia} fullscreen onClose={() => setGraphFullscreen(false)} />
     </div>}

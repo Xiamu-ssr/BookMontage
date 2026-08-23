@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
-import { adoptInspiration, importInspirationFile } from '../lib/inspirations.js';
+import { adoptInspiration, importInspirationFile, updateInspiration } from '../lib/inspirations.js';
 import { searchSources, sourceCatalogs } from '../lib/sources.js';
 import { cacheRoot, dataRoot, exportSnapshot, findItem, importBundle, initialize, logicalId, makeId, openStore, putItem, putLink, reviseItem, tmpRoot, verifyStore } from '../lib/store.js';
 
@@ -34,8 +34,11 @@ function help() {
     [--sort relevance|popular|newest|random] [--limit 6] [--page 1]
     [--atleast 1920x1080] [--ratio 16x9] [--color 66ccff]
     [--proxy http://127.0.0.1:7890] [--full] [--refresh]
-  bookmontage inspiration-list [--category <name>] [--tag <name>]
-  bookmontage inspiration-import <image> --category <name> --title <name> [--tags <a,b>]
+  bookmontage inspiration-list [--category <name>] [--subcategory <name>] [--type 角色|场景] [--tag <name>]
+  bookmontage inspiration-import <image> [--category <name>] [--subcategory <name>]
+    --title <name> [--types <角色,场景>] [--tags <a,b>] [--description-file <path>]
+  bookmontage inspiration-update <asset> [--category <name>] [--subcategory <name>]
+    [--title <name>] [--types <角色,场景>] [--tags <a,b>] [--description-file <path>]
   bookmontage inspiration-adopt <asset> --target <character|location|prop> [--title <name>]
   bookmontage revise <id> <patch.json>
   bookmontage links <id|slug|path>
@@ -229,16 +232,29 @@ async function stashRemote(url) {
 function listInspirations() {
   const db = openStore();
   const category = flag('category', '').trim().toLowerCase();
+  const subcategory = flag('subcategory', '').trim().toLowerCase();
+  const type = flag('type', '').trim().toLowerCase();
   const tag = flag('tag', '').trim().toLowerCase();
-  const categories = db.prepare("SELECT id,data FROM item WHERE type='inspiration_category' ORDER BY rowid").all()
-    .map(row => ({ id:row.id, ...JSON.parse(row.data) }));
+  const rows = db.prepare("SELECT id,type,parent,data FROM item WHERE type IN ('inspiration_category','inspiration_subcategory','inspiration_asset') ORDER BY rowid").all()
+    .map(row => ({ ...row, data:JSON.parse(row.data) }));
+  const latest = new Map();
+  for (const row of rows) latest.set(logicalId(row.id), row);
+  const current = [...latest.values()];
+  const categories = current.filter(row => row.type === 'inspiration_category').map(row => ({ id:row.id, ...row.data }));
+  const subcategories = current.filter(row => row.type === 'inspiration_subcategory').map(row => ({ id:row.id, parent:row.parent, ...row.data }));
   const categoryById = new Map(categories.map(item => [item.id, item.title]));
-  const assets = db.prepare("SELECT id,parent,data FROM item WHERE type='inspiration_asset' ORDER BY rowid DESC").all()
-    .map(row => ({ id:row.id, parent:row.parent, ...JSON.parse(row.data), category:categoryById.get(row.parent) || '未分类' }))
+  const subcategoryById = new Map(subcategories.map(item => [item.id, item]));
+  const assets = current.filter(row => row.type === 'inspiration_asset').reverse()
+    .map(row => {
+      const child = subcategoryById.get(row.parent);
+      return { id:row.id, parent:row.parent, ...row.data, category:categoryById.get(child?.parent || row.parent) || '', subcategory:child?.title || '' };
+    })
     .filter(item => (!category || String(item.category).toLowerCase().includes(category))
+      && (!subcategory || String(item.subcategory).toLowerCase().includes(subcategory))
+      && (!type || (item.types || []).some(value => String(value).toLowerCase() === type))
       && (!tag || (item.tags || []).some(value => String(value).toLowerCase() === tag)));
   db.close();
-  return { categories, assets };
+  return { categories, subcategories, assets };
 }
 
 function relationCommand(mode, sourceSelector, kind, targetSelector) {
@@ -446,9 +462,21 @@ try {
     console.log(JSON.stringify(listInspirations(), null, 2));
   } else if (command === 'inspiration-import') {
     console.log(JSON.stringify(importInspirationFile(args[0], {
-      category:flag('category', '未分类'),
+      category:flag('category', ''),
+      subcategory:flag('subcategory', ''),
       title:flag('title', args[0]?.split('/').pop() || '未命名灵感'),
+      types:String(flag('types', '')).split(/[,，]/),
       tags:String(flag('tags', '')).split(/[,，]/),
+      detailed_description:flag('description-file') ? readFileSync(flag('description-file'), 'utf8') : '',
+    }), null, 2));
+  } else if (command === 'inspiration-update') {
+    console.log(JSON.stringify(updateInspiration(args[0], {
+      ...(args.includes('--category') ? { category:flag('category', '') } : {}),
+      ...(args.includes('--subcategory') ? { subcategory:flag('subcategory', '') } : {}),
+      ...(args.includes('--title') ? { title:flag('title', '') } : {}),
+      ...(args.includes('--types') ? { types:String(flag('types', '')).split(/[,，]/) } : {}),
+      ...(args.includes('--tags') ? { tags:String(flag('tags', '')).split(/[,，]/) } : {}),
+      ...(args.includes('--description-file') ? { detailed_description:readFileSync(flag('description-file'), 'utf8') } : {}),
     }), null, 2));
   } else if (command === 'inspiration-adopt') {
     console.log(JSON.stringify(adoptInspiration(args[0], flag('target'), { title:flag('title') }), null, 2));
